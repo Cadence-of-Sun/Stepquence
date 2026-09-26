@@ -1,0 +1,71 @@
+/* Atkinson Hyperlegible Next (OFL-1.1, see fonts/OFL-LICENSE.txt). Self-hosted:
+   the app must work offline and makes no third-party requests. */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/atkinson-hyperlegible-next-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/atkinson-hyperlegible-next-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  /* Calm, high-contrast palette */
+  --color-bg: #f6f4ef;
+  --color-surface: #ffffff;
+  --color-text: #1c1c1e;
+  --color-text-muted: #5b5b61;
+  --color-accent: #2f6fbd;
+  --color-accent-text: #ffffff;
+  --color-done: #2e8b57;
+  --color-muted: #c9c6bf;
+  --color-frame: #e9e6df;
+
+  /* Type */
+  --font: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --text-base: 1.25rem;
+  --text-title: clamp(2rem, 6vw, 3.5rem);
+  --text-heading: 1.5rem;
+
+  /* Touch targets: well above the 48px minimum */
+  --tap-min: 4rem;
+  --tap-primary: 5.5rem;
+
+  /* Spacing and shape */
+  --space-1: 0.5rem;
+  --space-2: 1rem;
+  --space-3: 1.5rem;
+  --space-4: 2.5rem;
+  --radius: 1rem;
+}
+
+html,
+body,
+#app {
+  height: 100dvh;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font);
+  font-size: var(--text-base);
+}
+
+.home {
+  padding: var(--space-3);
+}
+
+.group + .group {
+  margin-top: var(--space-4);
+}
+
+.group h2 {
+  font-size: var(--text-heading);
+}
