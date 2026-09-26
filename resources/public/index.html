@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
     <title>Stepwise</title>
     <link rel="preload" href="/fonts/atkinson-hyperlegible-next-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+    <script>
+      // Apply the saved theme before first paint (no bright flash).
+      // Kept in sync by the :theme/apply effect.
+      try {
+        var theme = localStorage.getItem("stepwise.theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
     <link rel="stylesheet" href="/reset.css">
     <link rel="stylesheet" href="/app.css">
   </head>

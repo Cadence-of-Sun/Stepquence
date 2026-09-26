@@ -1,0 +1,42 @@
+(ns stepquence.views.icons
+  "Small inline SVG icons. Stroke/fill use currentColor.")
+
+(defn sun []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:circle {:cx 12 :cy 12 :r 4.5 :fill "currentColor"}]
+   [:g {:stroke "currentColor" :stroke-width 2 :stroke-linecap "round"}
+    (for [angle (range 0 360 45)]
+      ^{:key angle}
+      [:line {:x1 12 :y1 2.5 :x2 12 :y2 4.8
+              :transform (str "rotate(" angle " 12 12)")}])]])
+
+(defn moon []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill "currentColor"
+           :d    "M20 14.6A8.5 8.5 0 0 1 9.4 4a8.5 8.5 0 1 0 10.6 10.6Z"}]])
+
+(defn arrow-right []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill            "none"
+           :stroke          "currentColor"
+           :stroke-width    2.5
+           :stroke-linecap  "round"
+           :stroke-linejoin "round"
+           :d               "M4 12h15M13 6l6 6-6 6"}]])
+
+(defn arrow-left []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill            "none"
+           :stroke          "currentColor"
+           :stroke-width    2.5
+           :stroke-linecap  "round"
+           :stroke-linejoin "round"
+           :d               "M20 12H5M11 6l-6 6 6 6"}]])
+
+(defn check-circle
+  "Completion mark. The circle and check are drawn in by CSS
+  (.finished-mark), check after circle."
+  []
+  [:svg.finished-mark {:viewBox "0 0 64 64" :aria-hidden true}
+   [:circle.finished-mark-circle {:cx 32 :cy 32 :r 28}]
+   [:path.finished-mark-check {:d "M20 33.5l8 8 16-18"}]])

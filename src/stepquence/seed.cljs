@@ -66,6 +66,7 @@
             (task 1024 "Put your plate in the sink")]}
 
    ;; Exactly max-steps long, to exercise the progress bar at full width.
+   ;; Step 5 links to "Brush teeth".
    (id 404)
    {:id (id 404)
     :title "Bedtime"
@@ -75,7 +76,7 @@
             (task 1032 "Bath")
             (task 1033 "Dry off")
             (task 1034 "Pyjamas on")
-            (task 1035 "Brush teeth")
+            {:id (id 1035) :kind :link :sequence-id (id 402)}
             (task 1036 "Toilet")
             (task 1037 "Wash hands")
             (task 1038 "Choose a book")

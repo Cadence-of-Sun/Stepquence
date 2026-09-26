@@ -23,6 +23,20 @@
 
 (def NonBlank [:re #"\S"])
 
+;; Text length caps. They keep every layout predictable (nothing can
+;; overflow the step card or the sequence list) and are enforced here so
+;; imports are held to them too. The editor will use them as input limits.
+(def max-step-title 60)
+(def max-description 200)
+(def max-name
+  "Sequence titles, item titles, collection and group names."
+  40)
+
+(defn Text
+  "Non-blank string of at most `max` characters."
+  [max]
+  [:and [:string {:min 1 :max max}] NonBlank])
+
 (def Date
   "Local calendar date, \"YYYY-MM-DD\" (after applying the day boundary)."
   [:re #"^\d{4}-\d{2}-\d{2}$"])
@@ -45,21 +59,21 @@
   "A *thing*: used by requirements and collections."
   [:map
    [:id :uuid]
-   [:title NonBlank]
+   [:title (Text max-name)]
    [:image-id {:optional true} :uuid]])
 
 (def Collection
   "Named, ordered list of item ids. Used by choice steps."
   [:map
    [:id :uuid]
-   [:name NonBlank]
+   [:name (Text max-name)]
    [:item-ids [:vector :uuid]]])
 
 (def StepCommon
   [:map
    [:id :uuid]
-   [:title NonBlank]
-   [:description {:optional true} :string]])
+   [:title (Text max-step-title)]
+   [:description {:optional true} [:string {:max max-description}]]])
 
 (def TaskStep
   (mu/merge
@@ -79,15 +93,24 @@
     [:kind [:= :choice]]
     [:collection-id :uuid]]))
 
+(def LinkStep
+  "Walks through another, separate sequence, then returns here. Shows that
+  sequence's title, so renames carry over."
+  [:map
+   [:id :uuid]
+   [:kind [:= :link]]
+   [:sequence-id :uuid]])
+
 (def Step
   [:multi {:dispatch :kind}
    [:task TaskStep]
-   [:choice ChoiceStep]])
+   [:choice ChoiceStep]
+   [:link LinkStep]])
 
 (def Sequence
   [:map
    [:id :uuid]
-   [:title NonBlank]
+   [:title (Text max-name)]
    [:image-id {:optional true} :uuid]
    ;; Schedule presets (every day / weekdays / weekends / custom) are UI
    ;; sugar over this set; the set is the single source of truth.
@@ -100,7 +123,7 @@
   "Named, ordered. Each sequence belongs to exactly one group."
   [:map
    [:id :uuid]
-   [:name NonBlank]
+   [:name (Text max-name)]
    [:sequence-ids [:vector :uuid]]])
 
 (def Content
@@ -113,6 +136,9 @@
 
 (def Settings
   [:map
+   ;; Device display preference; nil follows the system. Mirrored to
+   ;; localStorage so it can be applied before first paint.
+   [:theme [:maybe [:enum :light :dark]]]
    [:reward-level [:enum :off :calm :celebratory]]
    [:sound? :boolean]
    ;; Hour (0-23) at which "today" rolls over.
@@ -153,6 +179,8 @@
    [:index nat-int?]
    ;; Steps 0..done-count-1 are complete. Going back never lowers this.
    [:done-count nat-int?]
+   ;; Requirements checklist has been passed (Ready pressed, or resumed).
+   [:ready? :boolean]
    [:checked [:set :uuid]]
    ;; choice step id -> chosen item id
    [:choices [:map-of :uuid :uuid]]])
@@ -165,7 +193,13 @@
   [:map
    [:screen [:enum :loading :home :walkthrough]]
    [:parent? :boolean]
-   [:overview? :boolean]])
+   [:overview? :boolean]
+   ;; Tracks prefers-color-scheme; used while settings :theme is nil.
+   [:system-theme [:enum :light :dark]]
+   ;; Which way the walkthrough card slides in.
+   [:nav-direction {:optional true} [:enum :forward :back]]
+   ;; Epoch ms; walkthrough input is ignored until then (double-tap guard).
+   [:input-locked-until {:optional true} number?]])
 
 ;; ---------------------------------------------------------------------------
 
@@ -179,6 +213,8 @@
    [:day Day]
    ;; per-run
    [:run [:maybe Run]]
+   ;; Runs waiting on a linked sequence, innermost last.
+   [:run-stack [:vector Run]]
    ;; ephemeral
    [:ui Ui]])
 

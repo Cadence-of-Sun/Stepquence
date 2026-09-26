@@ -6,7 +6,8 @@
    [stepquence.seed :as seed]))
 
 (def default-settings
-  {:reward-level           :calm
+  {:theme                  nil
+   :reward-level           :calm
    :sound?                 false
    :day-boundary-hour      3
    :pin                    nil
@@ -22,7 +23,9 @@
    :day {:date nil :done #{} :resume {}}
    ;; per-run
    :run nil
+   :run-stack []
    ;; ephemeral
    :ui {:screen :home
         :parent? false
-        :overview? false}})
+        :overview? false
+        :system-theme :light}})
