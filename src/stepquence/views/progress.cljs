@@ -50,9 +50,12 @@
        {:class (if complete? "go-complete" (str "go-" (name direction)))}]]]))
 
 (defn mini-dots
-  "A small row of dots, one per step: a sequence at a glance."
-  [steps]
-  [:span.mini-dots {:aria-hidden true}
-   (for [{:keys [id kind]} steps]
-     ^{:key (str id)}
-     [:i {:class (when (= :link kind) "is-link")}])])
+  "A small row of dots, one per step: a sequence at a glance. The first
+  `done-count` are filled."
+  ([steps] (mini-dots steps 0))
+  ([steps done-count]
+   [:span.mini-dots {:aria-hidden true}
+    (for [[i {:keys [id kind]}] (map-indexed vector steps)]
+      ^{:key (str id)}
+      [:i {:class [(when (= :link kind) "is-link")
+                   (when (< i done-count) "is-done")]}])]))

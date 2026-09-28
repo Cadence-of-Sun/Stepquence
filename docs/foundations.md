@@ -20,10 +20,21 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Parent-mode navigation is preview only. It NEVER records completion or daily progress.
 - Parent mode entry: a subtle hidden gesture (e.g. long-press a corner) plus a PIN.
 - Parent mode auto-locks on inactivity timeout and on `visibilitychange` (app backgrounded).
-- Home screen: image-first sequence cards, organized into parent-defined groups. Groups are renamed and reordered in place on the home screen in parent mode.
+- Home screen ("Sequences"): compact sequence cards (image-first once images exist) with a mini dot per step, organized into parent-defined groups. Groups are renamed and reordered in place on the home screen in parent mode.
+  - Done today: green edge, check, all dots filled. Started but unfinished today: the steps done so far are filled (it will resume there).
+  - A group whose sequences are all done today gets a plain checkmark after its name, in the heading's own color and size.
+- Leaving a walkthrough is labeled "Exit" (not "Home"/"Back"), everywhere, so one word always means one action.
 
 ## Walkthrough (step view)
 - One step per screen as a focused card. Horizontal orientation; transitions move left-to-right.
+- Layout:
+  ```
+  Exit                      (Part of <parent>)
+        [ card: title, description, options ]
+        [ primary button ]                    <- fixed position
+  ← Back      3 of 7 / progress dots      Next: <title>
+  ```
+  - The card sits directly above the primary button and grows upward, so the button never moves between steps. Nothing else moves either: hidden controls use `visibility: hidden`, and the "Next:" hint has a fixed height (the Back button's) whether its title takes one line or two.
 - Step content: `:title` (required), `:description` (optional), image (optional).
 - The image-less layout is a first-class design: large centered title, description below. It is also the fallback when an image fails to load. No generic placeholder icons.
 - Image frame:
@@ -31,12 +42,16 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Image is `object-fit: contain` by default. Per-step override to `cover` + `object-position` is allowed.
   - The frame reserves its space, so there is no layout shift.
   - The Done button is always visible without scrolling. Step title is used as `alt`.
-- Progress: a dot bar (filled = done, highlighted = current, hollow = future) plus "3 of 7" text.
-- A "Next:" thumbnail of the upcoming step only (deliberately asymmetric: the past is shown by filled dots). On the last step, the Next slot shows a finish marker ("All done!").
-- A single "Done" action marks the step complete AND advances. Lock input for ~700ms after advancing to prevent double-tap skips.
+- Progress: a dot bar (filled = done, hollow = future) plus "3 of 7" text above it.
+  - The current position is a line under its dot (not a ring). It is one element that slides between equal-width slots, and while travelling it becomes an arrow pointing the way it moves (right forward, left back).
+  - On finishing, the line grows to underline the whole bar and turns green, like the rule under a finished sum.
+  - Marker shapes echo their controls: requirements = a box that gets a drawn-in check; choice = a vertical stack of small dots in option order; link = a pill holding a little sequence.
+- A "Next:" hint with the upcoming step's title only (deliberately asymmetric: the past is shown by filled dots). On the last step, it shows the finish marker ("All done!").
+- The primary button is labeled by what it does: Ready (requirements), Done, Start (enter a linked sequence), Exit / Continue (on the finish screen). Done marks the step complete AND advances. Input is locked for ~700ms after any move to prevent double-tap skips (including a second tap landing on the next screen's options).
 - Back navigation is allowed, de-emphasized, and view-only. Going back never undoes completion.
+- Revisited (already-completed) positions have nothing to do, only pages to turn: the primary button is hidden (keeping its space), and the corners become a symmetric pair of neutral page turns, "← Back" and "Next →". Done returns on reaching the first not-yet-done step.
 - Buttons are the primary input. No swipe navigation (possibly opt-in later, off by default).
-- Sequence end: an unambiguous "All done!" screen with one big button back to the menu.
+- Sequence end: an unambiguous "All done!" screen: a check-circle that draws itself in, the sequence's title, "All done!", and one big button (Exit; Continue → inside a linked sequence). The progress bar stays, fully filled and underlined.
 - HARD CAP: 12 steps per sequence (a single named constant).
 - Screen Wake Lock API is active during walkthroughs.
 
@@ -53,11 +68,20 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Optional per sequence: a vector of item references.
 - Shown as a checklist screen before step 1, with its own distinct marker dot at the start of the progress bar.
 - The child taps each item as gathered. The "Ready" button is disabled until all are checked; it should read as "not yet," not "broken," and animate to life when enabled.
+  - Disabled: dashed edge, faint hatching (so it can't be mistaken for a checklist row), and the word struck through. Enabled: solid accent, with a small bounce as it wakes.
 - The checklist resets on every run.
 
 ## Choice steps
 - `:kind :choice` referencing a shared collection of items as options. (Optional steps were considered and REJECTED: "do I have to?" ambiguity.)
+- Options are a vertical list (like the requirements checklist, with a dot where the checklist has a box), in the same order as the progress marker's dot stack, so the marker reads as a miniature of the buttons. Done is gated until an option is chosen; a choice whose collection is missing or empty is not gated (never a dead end).
 - Progress marker: a stack of dots. After choosing, ALL dots remain; the chosen one is styled as complete and the others are muted. The choice stays visible in the overview.
+
+## Linked sequences
+- `:kind :link` with `:sequence-id`: a step that walks through another, separate sequence (e.g. Bedtime → "Brush teeth"). Chosen instead of nesting sequences in the data: sequences stay flat and independently usable.
+- The step shows the linked sequence's title (renames carry over), a mini dot preview of it, and a "Start" button.
+- The linked sequence runs as normal, in whatever state it is in today (it resumes if started earlier). The header shows "Part of <parent>".
+- Finishing it returns to the parent with the link step completed; the finish button says "Continue →" rather than "Exit". Exit inside a linked sequence goes up one level, leaving the link step not done.
+- A link to a missing or empty sequence, or to one already in progress (a cycle), behaves as a plain step.
 - Open question: the max number of options displayed at once.
 
 ## Timers
@@ -90,6 +114,8 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 
 ## Data model
 - Sequences contain their steps INLINE (a vector; order = vector order). Steps are not shared between sequences.
+- Step kinds: `:task` (title, description, image, timer), `:choice` (collection), `:link` (another sequence).
+- Text length caps, enforced in the schema (so imports too) and later as editor input limits: step title 60 characters, description 200, sequence/item/collection/group names 40. Long unbroken words wrap as a CSS backstop.
 - Shared libraries, referenced by UUID:
   - Images: `{:id :name? :source :local|:url :href? :width :height}`. Steps reference `:image-id`. This enables reuse, and fixing an image once fixes every step that uses it.
   - Items: `{:id :title :image-id?}`, representing a *thing*. Used by requirements and collections.
@@ -128,12 +154,13 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 
 ## Platform and accessibility
 - Service worker caches the app shell for offline use.
-- Highly legible font (Atkinson Hyperlegible or Lexend). Touch targets well above 48px. High contrast. Use `dvh` units.
+- Highly legible font (Atkinson Hyperlegible Next, self-hosted). Touch targets well above 48px. High contrast. Use `dvh` units.
+- Light and dark themes. The app follows the system (`prefers-color-scheme`, live) until the toggle is pressed; the toggle shows ☀ / ☾ with the active one highlighted, and each press switches and saves the choice. The choice is kept in `localStorage` (a device display preference) so an inline script can apply it before first paint.
 - Document for parents: iOS Guided Access and Android app pinning lock the device to the app (both work with browsers and installed PWAs).
 
 ## Explicitly out of scope
 - Optional steps
-- Nested sequences
+- Nested sequences in the data (see Linked sequences for the alternative)
 - Reusable steps
 - Any backend or sync service
 - Long-term statistics or history

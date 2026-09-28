@@ -33,6 +33,30 @@
            :stroke-linejoin "round"
            :d               "M20 12H5M11 6l-6 6 6 6"}]])
 
+(defn checkmark
+  "A bare checkmark stroke, sized and colored like the surrounding text
+  (1em, currentColor)."
+  []
+  [:svg.checkmark {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill            "none"
+           :stroke          "currentColor"
+           :stroke-width    3
+           :stroke-linecap  "round"
+           :stroke-linejoin "round"
+           :d               "M4.5 12.5l5 5L19.5 6.5"}]])
+
+(defn check
+  "A plain check in a filled circle."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:circle {:cx 12 :cy 12 :r 11 :fill "currentColor"}]
+   [:path {:fill            "none"
+           :stroke          "var(--color-surface)"
+           :stroke-width    2.8
+           :stroke-linecap  "round"
+           :stroke-linejoin "round"
+           :d               "M7 12.5l3.3 3.2L17 8.8"}]])
+
 (defn check-circle
   "Completion mark. The circle and check are drawn in by CSS
   (.finished-mark), check after circle."

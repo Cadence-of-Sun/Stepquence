@@ -47,6 +47,12 @@
      {:db (assoc-in db [:settings :theme] theme)
       :fx [[:theme/apply {:theme theme :save? true}]]})))
 
+(re-frame/reg-event-db
+ ::dev-reset-day
+ ;; Dev tool: forget today's done set and resume positions.
+ (fn-traced [db _]
+   (assoc db :day {:date nil :done #{} :resume {}})))
+
 (re-frame/reg-event-fx
  ::app-visible
  (fn-traced [{:keys [db]} _]

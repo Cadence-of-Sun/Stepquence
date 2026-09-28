@@ -9,6 +9,11 @@
    (:content db)))
 
 (re-frame/reg-sub
+ ::day
+ (fn [db]
+   (:day db)))
+
+(re-frame/reg-sub
  ::screen
  (fn [db]
    (get-in db [:ui :screen])))
@@ -29,14 +34,25 @@
 
 (re-frame/reg-sub
  ::home-groups
+ ;; Groups with their sequences, each annotated with today's progress:
+ ;; :done-today? and :done-count (steps done so far, for a resumable run).
  :<- [::content]
- (fn [{:keys [groups sequences]}]
+ :<- [::day]
+ (fn [[{:keys [groups sequences]} {:keys [done resume]}]]
    ;; Resolve ids defensively: dangling references are skipped. Sequences
    ;; without steps and empty groups are hidden from the child.
    (into []
          (keep (fn [group]
                  (let [seqs (into []
-                                  (comp (keep sequences) (filter (comp seq :steps)))
+                                  (comp (keep sequences)
+                                        (filter (comp seq :steps))
+                                        (map (fn [{:keys [id steps] :as sequence}]
+                                               (let [done? (contains? done id)]
+                                                 (assoc sequence
+                                                        :done-today? done?
+                                                        :done-count  (if done?
+                                                                       (count steps)
+                                                                       (get-in resume [id :done-count] 0)))))))
                                   (:sequence-ids group))]
                    (when (seq seqs)
                      (assoc group :sequences seqs)))))
