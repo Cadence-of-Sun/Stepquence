@@ -72,7 +72,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - RE-FRAME GOTCHA: Reagent renders asynchronously. Inside the `startViewTransition` callback, dispatch and then force the DOM update (`reagent.core/flush`, or resolve a promise via `r/after-render`). Otherwise the "after" snapshot equals the "before" and nothing animates. Wrap this once as an effect handler, e.g. `:view-transition/dispatch`.
   - Implemented as `:view-transition/dispatch` (`stepquence.fx`): `dispatch-sync` + `r/flush` inside the callback. The callback always runs after the triggering event finishes, so `dispatch-sync` is safe there. This relies on React 17's synchronous legacy render; moving to React 18's `createRoot` would also need `flushSync`.
   - Shared names: markers use `step-dot-<id>` (`step-dot-requirements` for the checklist marker), and the position line uses `step-indicator`.
-  - Durations are currently uniform (500ms). Per-dot durations or staggering are still an option if long-distance dots feel too fast.
+  - Shared elements move over 950ms with an ease-in-out curve (500ms felt rushed). The rest of the page cross-fades in 450ms, so the moving pieces lead. Per-dot durations or staggering are still an option if long-distance dots feel too fast.
 
 ## Requirements ("What you need")
 - Optional per sequence: a vector of item references.

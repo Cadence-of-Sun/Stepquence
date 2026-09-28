@@ -543,10 +543,17 @@ button {
   font-size: 1rem;
 }
 
-/* Shared elements (markers, indicator) glide between bar and list. */
+/* Shared elements (markers, indicator, title) glide between bar and
+   list: unhurried, easing in and out. The rest of the page (root) just
+   cross-fades, and more quickly, so the moving pieces lead. */
 ::view-transition-group(*) {
-  animation-duration: 500ms;
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  animation-duration: 950ms;
+  animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 450ms;
 }
 
 /* Content grows upward from the primary button, which sits at a fixed
