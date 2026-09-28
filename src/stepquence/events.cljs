@@ -137,8 +137,10 @@
 
 (re-frame/reg-event-fx
  ::app-hidden
+ ;; Save now (the page may be closing) and lock parent mode.
  (fn-traced [_ _]
-   {:fx [[:storage/flush]]}))
+   {:fx [[:storage/flush]
+         [:dispatch [::lock-parent]]]}))
 
 ;; ---------------------------------------------------------------------------
 ;; Walkthrough
@@ -291,3 +293,78 @@
  (walkthrough-input
   (fn [db _ [_ step-id item-id]]
     {:db (assoc-in db [:run :choices step-id] item-id)})))
+
+;; ---------------------------------------------------------------------------
+;; Parent mode: hidden gesture + PIN; locks when idle or backgrounded.
+
+(def pin-min 4)
+(def pin-max 8)
+
+(re-frame/reg-event-db
+ ::parent-gesture
+ ;; The hidden long press. With no PIN yet, the parent chooses one first.
+ (fn-traced [db _]
+   (if (get-in db [:ui :parent?])
+     db
+     (assoc-in db [:ui :pin-entry]
+               {:mode   (if (get-in db [:settings :pin]) :unlock :set)
+                :digits ""}))))
+
+(re-frame/reg-event-db
+ ::pin-digit
+ (fn-traced [db [_ digit]]
+   (update-in db [:ui :pin-entry]
+              (fn [entry]
+                (when entry
+                  (cond-> (assoc entry :message nil)
+                    (< (count (:digits entry)) pin-max) (update :digits str digit)))))))
+
+(re-frame/reg-event-db
+ ::pin-backspace
+ (fn-traced [db _]
+   (update-in db [:ui :pin-entry]
+              (fn [entry]
+                (when entry
+                  (update entry :digits #(subs % 0 (max 0 (dec (count %))))))))))
+
+(re-frame/reg-event-db
+ ::pin-cancel
+ (fn-traced [db _]
+   (assoc-in db [:ui :pin-entry] nil)))
+
+(defn- unlock [db]
+  {:db (-> db
+           (assoc-in [:ui :parent?] true)
+           (assoc-in [:ui :pin-entry] nil))
+   :fx [[:parent/idle-lock {:timeout-ms (* 1000 (get-in db [:settings :parent-timeout-seconds]))
+                            :on-idle    [::lock-parent]}]]})
+
+(re-frame/reg-event-fx
+ ::pin-submit
+ (fn-traced [{:keys [db]} _]
+   (let [{mode :mode digits :digits first-entry :first :as entry} (get-in db [:ui :pin-entry])
+         retry (fn [mode message]
+                 {:db (assoc-in db [:ui :pin-entry] {:mode mode :digits "" :message message})})]
+     (when (and entry (<= pin-min (count digits)))
+       (case mode
+         :unlock  (if (= digits (get-in db [:settings :pin]))
+                    (unlock db)
+                    (retry :unlock "That's not it. Try again."))
+         :set     {:db (assoc-in db [:ui :pin-entry] {:mode :confirm :digits "" :first digits})}
+         :confirm (if (= digits first-entry)
+                    (unlock (assoc-in db [:settings :pin] digits))
+                    (retry :set "Those didn't match. Choose a PIN again.")))))))
+
+(re-frame/reg-event-fx
+ ::lock-parent
+ ;; Also closes an open PIN pad. A walkthrough previewed in parent mode
+ ;; ends: it must never continue as a real run (the steps the parent
+ ;; clicked through would count as done).
+ (fn-traced [{:keys [db]} _]
+   (let [previewing? (and (get-in db [:ui :parent?])
+                          (= :walkthrough (get-in db [:ui :screen])))
+         db          (-> db
+                         (assoc-in [:ui :parent?] false)
+                         (assoc-in [:ui :pin-entry] nil))]
+     (-> (if previewing? (leave-home db) {:db db})
+         (update :fx (fnil conj []) [:parent/idle-lock nil])))))

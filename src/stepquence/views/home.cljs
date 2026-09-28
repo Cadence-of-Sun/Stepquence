@@ -5,6 +5,7 @@
    [stepquence.events :as events]
    [stepquence.subs :as subs]
    [stepquence.views.icons :as icons]
+   [stepquence.views.parent :as parent]
    [stepquence.views.progress :as progress]))
 
 (defn- sequence-card [{:keys [id title steps done-today? done-count]}]
@@ -32,25 +33,11 @@
        :on-click #(re-frame/dispatch [::events/dev-reset-day])}
       "Dev: reset today"]]))
 
-(defn- theme-toggle []
-  ;; Shows which theme is active (the system's until pressed); pressing
-  ;; switches to the other and remembers it. Temporary home until
-  ;; parent-mode settings exist.
-  (let [showing @(re-frame/subscribe [::subs/theme-showing])
-        other   (if (= :dark showing) "light" "dark")]
-    [:button.theme-toggle.toggle
-     {:type       "button"
-      :aria-label (str "Switch to " other " theme")
-      :on-click   #(re-frame/dispatch [::events/toggle-theme])}
-     [:span.toggle-option {:class (when (= :light showing) "is-active")} [icons/sun]]
-     [:span.toggle-slash "/"]
-     [:span.toggle-option {:class (when (= :dark showing) "is-active")} [icons/moon]]]))
-
 (defn home []
   [:main.home
    [:header.home-header
-    [:h1.home-title "Sequences"]
-    [theme-toggle]]
+    ;; Holding the heading for 2s opens parent mode.
+    [parent/long-press-heading :h1.home-title "Sequences"]]
    (for [{:keys [id name sequences]} @(re-frame/subscribe [::subs/home-groups])]
      ^{:key (str id)}
      [:section.group

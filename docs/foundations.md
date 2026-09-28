@@ -18,8 +18,13 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Add/delete controls
   - Library screens
 - Parent-mode navigation is preview only. It NEVER records completion or daily progress.
-- Parent mode entry: a subtle hidden gesture (e.g. long-press a corner) plus a PIN.
-- Parent mode auto-locks on inactivity timeout and on `visibilitychange` (app backgrounded).
+- Parent mode entry: a hidden gesture plus a PIN.
+  - Gesture: hold the "Sequences" heading for 2 seconds. No visual feedback, so to a child it's just a heading. Lifting, moving off or scrolling cancels.
+  - PIN: 4–8 digits, on an opaque PIN pad (keypad, dot readout, OK labeled Unlock / Next / Save; keyboard digits, Backspace, Enter and Escape work too). The first time, the parent chooses a PIN and enters it twice. Stored as plain digits in settings: it keeps a child out on a family device, it isn't security.
+- Parent mode auto-locks on inactivity timeout (`:parent-timeout-seconds`, default 120) and on `visibilitychange` (app backgrounded).
+  - Idle detection, no polling: capture-phase `pointerdown`/`keydown` listeners stamp the last-input time into a plain atom (not app-db, so input costs no re-render or save). While unlocked, one timer checks the idle time when it fires and either locks or sleeps for the remainder. At most one wake-up per timeout period.
+  - Locking during a walkthrough returns to the sequence list, so a preview can never continue as a real run.
+- While unlocked, a banner on every screen ("Parent mode", the theme toggle, Lock) makes the mode unambiguous. The theme toggle lives there, not on the child's screens.
 - Home screen ("Sequences"): compact sequence cards (image-first once images exist) with a mini dot per step, organized into parent-defined groups. Groups are renamed and reordered in place on the home screen in parent mode.
   - Done today: green edge, check, all dots filled. Started but unfinished today: the steps done so far are filled (it will resume there).
   - A group whose sequences are all done today gets a plain checkmark after its name, in the heading's own color and size.
@@ -197,5 +202,4 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Garden mechanics (petal per step vs. per sequence; completion ritual)
 - Max options shown in a choice step
 - Whether resume feels right in practice
-- The exact parent-mode gesture
 - Whether the 12-step cap is right after real use

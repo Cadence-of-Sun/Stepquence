@@ -14,6 +14,16 @@
    (:day db)))
 
 (re-frame/reg-sub
+ ::parent?
+ (fn [db]
+   (get-in db [:ui :parent?])))
+
+(re-frame/reg-sub
+ ::pin-entry
+ (fn [db]
+   (get-in db [:ui :pin-entry])))
+
+(re-frame/reg-sub
  ::screen
  (fn [db]
    (get-in db [:ui :screen])))

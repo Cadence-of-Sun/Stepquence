@@ -144,6 +144,8 @@
    ;; Hour (0-23) at which "today" rolls over.
    [:day-boundary-hour [:int {:min 0 :max 23}]]
    ;; nil until the parent sets one.
+   ;; Plain digits: it keeps a child out of parent mode on a family
+   ;; device, it isn't security. Never leaves the device except in exports.
    [:pin [:maybe [:re #"^\d{4,8}$"]]]
    [:parent-timeout-seconds pos-int?]])
 
@@ -189,6 +191,15 @@
 ;; Ephemeral (never persisted). Left open: timers, object-URL cache and
 ;; image health results will be added as those features land.
 
+(def PinEntry
+  [:map
+   ;; :set then :confirm when no PIN exists yet; otherwise :unlock.
+   [:mode [:enum :unlock :set :confirm]]
+   [:digits [:re #"^\d{0,8}$"]]
+   ;; The first entry while confirming a new PIN.
+   [:first {:optional true} :string]
+   [:message {:optional true} [:maybe :string]]])
+
 (def Ui
   [:map
    [:screen [:enum :loading :home :walkthrough]]
@@ -203,7 +214,9 @@
    ;; :none when the view changed without moving (overview toggle).
    [:nav-direction {:optional true} [:enum :forward :back :none]]
    ;; Epoch ms; walkthrough input is ignored until then (double-tap guard).
-   [:input-locked-until {:optional true} number?]])
+   [:input-locked-until {:optional true} number?]
+   ;; PIN pad state while it is open.
+   [:pin-entry {:optional true} [:maybe PinEntry]]])
 
 ;; ---------------------------------------------------------------------------
 

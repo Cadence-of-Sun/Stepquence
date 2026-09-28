@@ -97,6 +97,27 @@ body,
   height: 100dvh;
 }
 
+/* Banner (parent mode only) above the current screen. */
+.app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
+.screen {
+  min-height: 0;
+}
+
+.loading,
+.home,
+.walkthrough {
+  height: 100%;
+}
+
+.home {
+  overflow-y: auto;
+}
+
 body {
   /* Backstop for long unbroken words (e.g. a pasted URL). */
   overflow-wrap: break-word;
@@ -204,6 +225,13 @@ button {
 
 .home-title {
   font-size: 2rem;
+}
+
+/* The hidden parent-mode gesture: no selection or callout while held. */
+.long-press {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Two-option toggles (theme, one step / all steps): both options shown,
@@ -356,6 +384,124 @@ button {
   white-space: nowrap;
 }
 
+/* ------------------------------------------------------------------------
+   Parent mode */
+
+.parent-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.4rem var(--space-2);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+.parent-banner-label {
+  margin-right: auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.parent-banner .toggle {
+  min-height: 3rem;
+}
+
+.parent-lock {
+  min-height: 3rem;
+  padding: 0 var(--space-2);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: 700;
+}
+
+/* PIN pad: opaque, so the screen behind stays calm and unreadable. */
+.pin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  background: var(--color-bg);
+  animation: fade-in 200ms ease-out;
+}
+
+.pin-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: min(100%, 20rem);
+}
+
+.pin-title {
+  font-size: var(--text-heading);
+}
+
+.pin-prompt {
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  height: 1rem;
+  margin-top: var(--space-1);
+}
+
+.pin-dots i {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--color-text);
+}
+
+.pin-message {
+  min-height: 1.5em;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.pin-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.pin-key {
+  display: grid;
+  place-items: center;
+  height: 4rem;
+  border: 2px solid var(--color-frame);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.pin-key.is-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+.pin-key .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.pin-ok {
+  width: 100%;
+  margin-top: var(--space-1);
+}
+
 /* Dev builds only */
 .dev-tools {
   margin-top: var(--space-4);
@@ -386,7 +532,6 @@ button {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--space-2);
-  height: 100dvh;
   padding: max(var(--space-2), env(safe-area-inset-top))
            max(var(--space-2), env(safe-area-inset-right))
            max(var(--space-2), env(safe-area-inset-bottom))

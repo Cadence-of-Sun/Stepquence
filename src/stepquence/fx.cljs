@@ -46,6 +46,44 @@
          (r/after-render #(scroll-into-view! scroll-into-view))))))
 
 ;; ---------------------------------------------------------------------------
+;; Parent-mode idle lock
+;;
+;; No polling. Two capture-phase listeners (pointerdown, keydown) stamp the
+;; time of the last input into a plain atom, not app-db, so input causes no
+;; re-render and no save. While parent mode is unlocked a single timer runs:
+;; when it fires it checks how long input has been idle, and either
+;; dispatches `on-idle` or sleeps again for the remaining time. At most one
+;; wake-up per timeout period.
+
+(defonce ^:private activity (atom {:last 0 :timer nil}))
+
+(defn- note-activity! [_]
+  (swap! activity assoc :last (js/Date.now)))
+
+(defn install-activity-listeners!
+  "Called once at startup."
+  []
+  (let [opts #js {:capture true :passive true}]
+    (.addEventListener js/document "pointerdown" note-activity! opts)
+    (.addEventListener js/document "keydown" note-activity! opts)))
+
+(re-frame/reg-fx
+ :parent/idle-lock
+ ;; {:timeout-ms n :on-idle event} starts (or restarts) the watch; nil stops it.
+ (fn [{:keys [timeout-ms on-idle]}]
+   (some-> (:timer @activity) js/clearTimeout)
+   (swap! activity assoc :timer nil)
+   (when timeout-ms
+     (note-activity! nil)
+     (letfn [(check []
+               (let [idle (- (js/Date.now) (:last @activity))]
+                 (if (>= idle timeout-ms)
+                   (do (swap! activity assoc :timer nil)
+                       (re-frame/dispatch on-idle))
+                   (swap! activity assoc :timer (js/setTimeout check (- timeout-ms idle))))))]
+       (swap! activity assoc :timer (js/setTimeout check timeout-ms))))))
+
+;; ---------------------------------------------------------------------------
 ;; Theme
 
 (def ^:private theme-storage-key "stepwise.theme")

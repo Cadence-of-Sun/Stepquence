@@ -33,6 +33,18 @@
       [:circle {:cx 5 :cy y :r 2 :fill "currentColor"}]
       [:path {:d (str "M10 " y "h10") :stroke "currentColor" :stroke-width 2.2 :stroke-linecap "round"}]])])
 
+(defn backspace []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill            "none"
+           :stroke          "currentColor"
+           :stroke-width    2
+           :stroke-linejoin "round"
+           :d               "M8.5 5H20a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H8.5L2.5 12z"}]
+   [:path {:stroke         "currentColor"
+           :stroke-width   2
+           :stroke-linecap "round"
+           :d              "M11 9l6 6M17 9l-6 6"}]])
+
 (defn arrow-right []
   [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
    [:path {:fill            "none"

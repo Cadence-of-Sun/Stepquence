@@ -28,6 +28,7 @@
 (defn init []
   (re-frame/dispatch-sync [::events/initialize-db])
   (.addEventListener js/document "visibilitychange" on-visibility-change)
+  (fx/install-activity-listeners!)
   (.addEventListener (fx/system-dark-query) "change"
                      #(re-frame/dispatch [::events/system-theme-changed (fx/system-theme)]))
   (dev-setup)
