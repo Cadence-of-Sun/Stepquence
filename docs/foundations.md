@@ -63,6 +63,8 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Each row: its marker, the title (link rows show the linked sequence's title), and for a choice row, the chosen option underneath. The current row is highlighted and has the position line under its dot.
   - In the overview, the footer (Back, bar, Next) steps aside, since the dots now live in the list. Child mode: view-only. Parent mode will add jumping to a row and drag-to-reorder.
   - Toggling is not a move: no card slide, no indicator arrow (`:nav-direction :none`).
+  - The current row is a shortcut back to its step view: the whole row is a button, with a small → at its end, using the same transition as the toggle. (A Done in the overview was considered and rejected: steps complete in different ways, like a choice or a checklist, so the overview would need every mechanism. The overview is the map; the step view is where he acts.)
+  - Only the list scrolls; the heading stays in view above it. Heading and list are centered together while the list fits.
   - The current row is scrolled into view before the "after" snapshot.
 - The dots are shared elements between the overview list and the walkthrough progress bar, animated via the View Transitions API (`document.startViewTransition`).
   - Each dot gets `view-transition-name: step-dot-<id>`.
@@ -181,6 +183,12 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Long-term statistics or history
 
 ## Low priority / future
+- Dim controls when idle (proposed, not built). The step screen has something in every corner, which can feel busy. Hiding controls until a tap was considered and set aside: it makes the screen depend on hidden state, makes taps ambiguous on choice/checklist screens, and hides options from a child who doesn't know they exist. The proposed alternative:
+  - After ~6s without input, the corner controls (Exit, view toggle, Back, Next hint/button) fade over ~1s to ~30% opacity. They keep their outlines and positions, so they still read as buttons.
+  - Done, the step content, the dots and "N of N" never dim.
+  - Any input restores them, including a tap on the empty background (checked with `event.target === event.currentTarget`, so taps on options or checklist items don't count). A tap on a dimmed control acts immediately; nothing needs revealing first.
+  - A parent setting, "Dim controls when idle", off by default, so a child learns the app with everything at full strength. Until parent settings exist, a dev toggle.
+  - Also considered: "quiet chrome" (borderless controls, always visible). Rejected because the outline is a useful "this is pressable" cue for a child new to the app.
 - Text-to-speech (Web Speech API) or parent-recorded audio for pre-readers
 - Opt-in swipe navigation
 - Optional group times to highlight the current group

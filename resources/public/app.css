@@ -455,16 +455,17 @@ button {
 }
 
 /* As the overview's heading */
-.overview-body > .sequence-heading {
+.wt-overview > .sequence-heading {
+  flex: none;
   margin-bottom: var(--space-3);
 }
 
-.overview-body .sequence-heading-title {
+.wt-overview .sequence-heading-title {
   font-size: 1.75rem;
   color: var(--color-text);
 }
 
-.overview-body .sequence-heading-context {
+.wt-overview .sequence-heading-context {
   font-size: 1rem;
 }
 
@@ -480,16 +481,22 @@ button {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
+/* Heading and list are centered together while the list fits; when it
+   doesn't, the list shrinks to the space left and scrolls on its own, and
+   the heading stays put. */
 .wt-overview {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
   min-height: 0;
-  overflow-y: auto;
 }
 
-.overview-body {
+.overview-scroll {
+  flex: 0 1 auto;
   width: min(100%, 34rem);
-  margin: auto 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .overview {
@@ -501,12 +508,32 @@ button {
 }
 
 .overview-row {
+  border-radius: 0.75rem;
+}
+
+.overview-row-inner {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  width: 100%;
   min-height: 3.5rem;
   padding: 0.25rem var(--space-2) 0.25rem var(--space-1);
-  border-radius: 0.75rem;
+  border: none;
+  border-radius: inherit;
+  background: none;
+  text-align: start;
+}
+
+/* The current row's "go to this step" hint. */
+.overview-go {
+  display: grid;
+  margin-left: auto;
+  color: var(--color-accent);
+}
+
+.overview-go .icon {
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .overview-row.is-current {

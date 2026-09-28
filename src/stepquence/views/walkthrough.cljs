@@ -75,21 +75,32 @@
      ^{:key (str id)}
      [:li.overview-row {:class [(when current? "is-current")
                                 (when done? "is-done")]}
-      [:span.overview-marker
-       [progress/marker m]
+      ;; The current row is a shortcut back to its step view (the same
+      ;; transition as the toggle). Other rows are view-only.
+      [(if current? :button.overview-row-inner :div.overview-row-inner)
        (when current?
-         [:span.overview-indicator
-          {:style {:view-transition-name progress/indicator-transition-name}}
-          [:span.indicator-shape]])]
-      [:span.overview-text
-       [:span.overview-title title]
-       (when detail
-         [:span.overview-detail detail])]])])
+         {:type       "button"
+          :aria-label (str "Go to step: " title)
+          :on-click   #(re-frame/dispatch [::events/toggle-overview])})
+       [:span.overview-marker
+        [progress/marker m]
+        (when current?
+          [:span.overview-indicator
+           {:style {:view-transition-name progress/indicator-transition-name}}
+           [:span.indicator-shape]])]
+       [:span.overview-text
+        [:span.overview-title title]
+        (when detail
+          [:span.overview-detail detail])]
+       (when current?
+         [:span.overview-go [icons/arrow-right]])]])])
 
 (defn- overview []
-  [:div.overview-body
+  ;; Only the list scrolls; the heading stays in view above it.
+  [:<>
    [sequence-heading :h1]
-   [overview-list]])
+   [:div.overview-scroll
+    [overview-list]]])
 
 ;; ---------------------------------------------------------------------------
 ;; Card
