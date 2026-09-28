@@ -107,7 +107,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Sequences have a schedule preset: every day / weekdays / weekends / custom days. There is no schedule library.
 - The daily slice is `{:date "YYYY-MM-DD" :done #{seq-ids}}`. It resets when the stored date differs from today.
 - Configurable day boundary (default ~3am).
-- Check the date on load AND on `visibilitychange`/resume, since PWAs stay open for days.
+- Check the date on load AND on `visibilitychange`/resume, since PWAs stay open for days. (Implemented: `stepquence.day/today` applies the boundary; a new date resets the done set and resume positions.)
 - Optionally keep the previous day's snapshot (e.g. for a "yesterday" view).
 - Framing is always positive for the child. Any "X of Y" score view is parent-facing.
 - Resume: if he exits mid-sequence, resume if same day, otherwise restart. Resume positions live in the per-day slice, so they reset automatically.
@@ -142,8 +142,13 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - `<img>` displays cross-origin fine, but fetching or canvas-drawing requires CORS. Offer "Save a local copy" when the host allows it.
   - Avoid caching opaque responses (Chrome pads their quota cost heavily).
 - Health check (parent mode): test URL images with `new Image()` onload/onerror across the library, badge affected sequences, and record walkthrough-time failures for the parent.
-- app-db persists to IndexedDB as an EDN string (`pr-str` / `cljs.reader/read-string`, or Transit) via a small wrapper like `idb-keyval`. Writes are debounced.
-- Boot is asynchronous: loading state → read → initialize event.
+- app-db persists to IndexedDB as an EDN string (`pr-str` / `cljs.reader/read-string`) via `idb-keyval`, one key (`stepwise.app-db`) holding the persistent and per-day slices (`:content`, `:settings`, `:meta`, `:day`). The per-run and ephemeral slices are never written.
+  - A global interceptor schedules a save only when an event changes a persisted slice. Writes are debounced (500ms) and flushed immediately when the app is hidden.
+  - Saving is off until storage has loaded, so defaults can never overwrite stored data.
+  - Stored data that is unreadable or fails the schema is copied to a backup key (`stepwise.app-db.unusable-<ms>`) before the app starts fresh. It is never silently discarded.
+  - Loaded data passes through `storage/migrate` (keyed on `:meta :schema-version`) before validation.
+  - If IndexedDB is unavailable, the app runs without saving rather than not at all.
+- Boot is asynchronous: loading state (background only, no spinner) → read → `::loaded` → home.
 - Call `navigator.storage.persist()`. Show a gentle "last backed up N days ago" nudge in parent mode.
 
 ## Export / import / sharing

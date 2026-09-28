@@ -7,5 +7,7 @@
 
 (defn main-panel []
   (case @(re-frame/subscribe [::subs/screen])
+    ;; Usually a few milliseconds: just the background, no spinner.
+    :loading     [:div.loading]
     :walkthrough [walkthrough/walkthrough]
     [home/home]))

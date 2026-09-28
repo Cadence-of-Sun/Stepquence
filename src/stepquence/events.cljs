@@ -2,10 +2,12 @@
   (:require
    [re-frame.core :as re-frame]
    [stepquence.config :as config]
+   [stepquence.day :as day]
    [stepquence.db :as db]
    [stepquence.fx]
    [stepquence.run :as run]
    [stepquence.schema :as schema]
+   [stepquence.storage :as storage]
    [day8.re-frame.tracing :refer-macros [fn-traced]]))
 
 (def check-app-db
@@ -22,6 +24,32 @@
 (when config/debug?
   (re-frame/reg-global-interceptor check-app-db))
 
+(def persist
+  "Schedule a (debounced) save whenever an event changes a persisted
+  slice. Inactive until storage has loaded, so defaults can never
+  overwrite stored data."
+  (re-frame/->interceptor
+   :id :persist
+   :after (fn [context]
+            (let [before (get-in context [:coeffects :db])
+                  after  (get-in context [:effects :db])]
+              (if (and after
+                       (get-in after [:ui :persist?])
+                       (not-every? #(identical? (get before %) (get after %))
+                                   schema/persisted-keys))
+                (update-in context [:effects :fx] (fnil conj []) [:storage/save after])
+                context)))))
+
+(re-frame/reg-global-interceptor persist)
+
+(defn- roll-day
+  "Start a fresh per-day slice if the date (by the day boundary) changed."
+  [db now]
+  (update db :day day/roll-over (day/today now (get-in db [:settings :day-boundary-hour]))))
+
+;; ---------------------------------------------------------------------------
+;; Boot: loading state -> read storage -> ::loaded
+
 (re-frame/reg-event-fx
  ::initialize-db
  [(re-frame/inject-cofx :theme/initial)]
@@ -29,8 +57,34 @@
    (let [{:keys [saved system]} (:theme/initial cofx)]
      {:db (-> db/default-db
               (assoc-in [:settings :theme] saved)
-              (assoc-in [:ui :system-theme] system))
-      :fx [[:theme/apply {:theme saved}]]})))
+              (assoc-in [:ui :system-theme] system)
+              (assoc-in [:ui :screen] :loading))
+      :fx [[:theme/apply {:theme saved}]
+           [:storage/load {:on-loaded [::loaded]}]
+           [:storage/request-persistence]]})))
+
+(re-frame/reg-event-fx
+ ::loaded
+ ;; result: {:data …} | {:empty true} (first run: seed content) |
+ ;; {:error …} (unusable data, already backed up: start fresh) |
+ ;; {:error … :unavailable true} (no IndexedDB: run without saving).
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ {:keys [data error unavailable]}]]
+   (when error
+     (js/console.error "Stored data not loaded:" error))
+   (let [;; The theme is a device preference owned by localStorage (it has
+         ;; to apply before first paint), so it wins over the stored copy.
+         theme (get-in db [:settings :theme])
+         db    (cond-> db
+                 data (merge data)
+                 true (-> (assoc-in [:settings :theme] theme)
+                          (roll-day now)
+                          (assoc-in [:ui :screen] :home)
+                          (assoc-in [:ui :persist?] (not unavailable))))]
+     {:db db
+      ;; Write back straight away: the first run's defaults, a migrated
+      ;; shape, or a rolled-over day.
+      :fx (when-not unavailable [[:storage/save db]])})))
 
 (re-frame/reg-event-db
  ::system-theme-changed
@@ -47,17 +101,27 @@
      {:db (assoc-in db [:settings :theme] theme)
       :fx [[:theme/apply {:theme theme :save? true}]]})))
 
-(re-frame/reg-event-db
+(re-frame/reg-event-fx
  ::dev-reset-day
  ;; Dev tool: forget today's done set and resume positions.
- (fn-traced [db _]
-   (assoc db :day {:date nil :done #{} :resume {}})))
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} _]
+   {:db (-> db (assoc :day (day/fresh nil)) (roll-day now))}))
 
 (re-frame/reg-event-fx
  ::app-visible
- (fn-traced [{:keys [db]} _]
-   (when (= :walkthrough (get-in db [:ui :screen]))
-     {:fx [[:wake-lock/request]]})))
+ ;; PWAs stay open for days: check the date on every return.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} _]
+   (when (not= :loading (get-in db [:ui :screen]))
+     {:db (roll-day db now)
+      :fx (when (= :walkthrough (get-in db [:ui :screen]))
+            [[:wake-lock/request]])})))
+
+(re-frame/reg-event-fx
+ ::app-hidden
+ (fn-traced [_ _]
+   {:fx [[:storage/flush]]}))
 
 ;; ---------------------------------------------------------------------------
 ;; Walkthrough

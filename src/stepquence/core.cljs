@@ -20,8 +20,10 @@
     (rdom/render [views/main-panel] root-el)))
 
 (defn- on-visibility-change []
-  (when (= "visible" (.-visibilityState js/document))
-    (re-frame/dispatch [::events/app-visible])))
+  (if (= "visible" (.-visibilityState js/document))
+    (re-frame/dispatch [::events/app-visible])
+    ;; Synchronous: the page may be closing, so save before returning.
+    (re-frame/dispatch-sync [::events/app-hidden])))
 
 (defn init []
   (re-frame/dispatch-sync [::events/initialize-db])

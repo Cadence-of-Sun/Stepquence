@@ -194,6 +194,9 @@
    [:screen [:enum :loading :home :walkthrough]]
    [:parent? :boolean]
    [:overview? :boolean]
+   ;; Storage has loaded and saving is on (false before load, or when
+   ;; IndexedDB is unavailable).
+   [:persist? :boolean]
    ;; Tracks prefers-color-scheme; used while settings :theme is nil.
    [:system-theme [:enum :light :dark]]
    ;; Which way the walkthrough card slides in.

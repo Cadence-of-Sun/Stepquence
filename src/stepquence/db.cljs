@@ -28,4 +28,5 @@
    :ui {:screen :home
         :parent? false
         :overview? false
+        :persist? false
         :system-theme :light}})
