@@ -47,8 +47,10 @@
   --space-4: 2.5rem;
   --radius: 1rem;
 
-  /* Progress bar */
+  /* Progress bar. Wide slots give the indicator room to travel; capped so
+     a full bar (requirements + 12 steps) still fits a phone. */
   --dot: clamp(0.9rem, 3.2vw, 1.4rem);
+  --slot: min(calc(var(--dot) * 2.2), calc((100vw - 2rem) / 13));
   --bar-height: calc(var(--dot) * 2.4);
 
   /* Motion */
@@ -125,7 +127,7 @@ button {
 .wt-exit,
 .wt-back,
 .wt-next,
-.theme-toggle {
+.toggle {
   min-height: var(--tap-min);
   min-width: var(--tap-min);
   padding: 0 var(--space-2);
@@ -204,13 +206,15 @@ button {
   font-size: 2rem;
 }
 
-.theme-toggle {
+/* Two-option toggles (theme, one step / all steps): both options shown,
+   the active one highlighted. */
+.toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.theme-option {
+.toggle-option {
   display: grid;
   place-items: center;
   width: 2.25rem;
@@ -220,17 +224,17 @@ button {
   transition: color 300ms, background-color 300ms;
 }
 
-.theme-option.is-active {
+.toggle-option.is-active {
   background: var(--color-accent-soft);
   color: var(--color-accent);
 }
 
-.theme-option .icon {
+.toggle-option .icon {
   width: 1.4rem;
   height: 1.4rem;
 }
 
-.theme-slash {
+.toggle-slash {
   color: var(--color-muted);
   font-size: 1.5rem;
 }
@@ -390,14 +394,159 @@ button {
   overflow: hidden;
 }
 
+/* Exit | sequence title | view toggle. Equal side columns center the
+   title in the viewport; a side column only grows past that (min
+   max-content) when a long title needs the room, so nothing collides.
+   On phones the title takes its own full-width row, still centered. */
 .wt-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+  grid-template-areas: "exit title toggle";
   align-items: center;
   gap: var(--space-2);
 }
 
-.wt-context {
+@media (max-width: 40rem) {
+  .wt-header {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "exit  toggle"
+      "title title";
+    row-gap: var(--space-1);
+  }
+}
+
+.wt-exit {
+  grid-area: exit;
+  justify-self: start;
+}
+
+.wt-header-title {
+  grid-area: title;
+  min-width: 0;
+}
+
+.sequence-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+/* max-content: the view-transition snapshot hugs the text, so the small
+   (header) and large (overview) versions keep the same shape and scale
+   cleanly into each other. */
+.sequence-heading-title {
+  width: max-content;
+  max-width: 100%;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--color-text-muted);
+}
+
+.sequence-heading-context {
+  width: max-content;
+  max-width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  color: var(--color-text-muted);
+}
+
+/* As the overview's heading */
+.overview-body > .sequence-heading {
+  margin-bottom: var(--space-3);
+}
+
+.overview-body .sequence-heading-title {
+  font-size: 1.75rem;
+  color: var(--color-text);
+}
+
+.overview-body .sequence-heading-context {
+  font-size: 1rem;
+}
+
+.view-toggle {
+  grid-area: toggle;
+  justify-self: end;
+}
+
+/* ------------------------------------------------------------------------
+   Overview */
+
+.walkthrough.is-overview {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.wt-overview {
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.overview-body {
+  width: min(100%, 34rem);
+  margin: auto 0;
+}
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3.5rem;
+  padding: 0.25rem var(--space-2) 0.25rem var(--space-1);
+  border-radius: 0.75rem;
+}
+
+.overview-row.is-current {
+  background: var(--color-accent-soft);
+}
+
+.overview-marker {
+  position: relative;
+  flex: none;
+}
+
+.overview-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.35rem;
+  display: grid;
+  place-items: center;
+}
+
+.overview-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.overview-title {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.overview-detail {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+/* Shared elements (markers, indicator) glide between bar and list. */
+::view-transition-group(*) {
+  animation-duration: 500ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Content grows upward from the primary button, which sits at a fixed
@@ -603,9 +752,6 @@ button {
    a line underneath that slides between equal-width slots. */
 
 .progress {
-  /* Wide slots give the indicator room to travel; capped so a full bar
-     (requirements + 12 steps) still fits a phone. */
-  --slot: min(calc(var(--dot) * 2.2), calc((100vw - 2rem) / 13));
   position: relative;
   width: max-content;
   padding-bottom: 0.75rem; /* room for the indicator */

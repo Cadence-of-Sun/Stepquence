@@ -19,19 +19,77 @@
    [stepquence.views.icons :as icons]
    [stepquence.views.progress :as progress]))
 
-(defn- header [finished?]
-  (let [parent-title @(re-frame/subscribe [::subs/parent-title])]
-    [:header.wt-header
-     ;; Hidden on the finished screen, whose primary button leaves instead.
-     ;; Hidden, not removed, so nothing shifts.
-     [:button.wt-exit
-      {:type        "button"
-       :style       {:visibility (if finished? "hidden" "visible")}
-       :aria-hidden finished?
-       :on-click    #(re-frame/dispatch [::events/exit])}
-      "Exit"]
+(defn- view-toggle [overview?]
+  ;; Same pattern as the theme toggle: both options shown, the active one
+  ;; highlighted; pressing switches.
+  [:button.view-toggle.toggle
+   {:type       "button"
+    :aria-label (if overview? "Show one step" "Show all steps")
+    :on-click   #(re-frame/dispatch [::events/toggle-overview])}
+   [:span.toggle-option {:class (when-not overview? "is-active")} [icons/one-step]]
+   [:span.toggle-slash "/"]
+   [:span.toggle-option {:class (when overview? "is-active")} [icons/all-steps]]])
+
+(defn- sequence-heading
+  "The active sequence's title, with \"Part of …\" inside a linked
+  sequence. Small in the step view's header, the list heading in the
+  overview; shared view-transition names move it between the two."
+  [title-tag]
+  (let [title        (:title @(re-frame/subscribe [::subs/run-sequence]))
+        parent-title @(re-frame/subscribe [::subs/parent-title])]
+    [:div.sequence-heading
+     [title-tag {:class "sequence-heading-title"
+                 :style {:view-transition-name "sequence-title"}}
+      title]
      (when parent-title
-       [:p.wt-context "Part of " [:strong parent-title]])]))
+       [:p.sequence-heading-context
+        {:style {:view-transition-name "sequence-context"}}
+        "Part of " [:strong parent-title]])]))
+
+(defn- header [finished? overview?]
+  [:header.wt-header
+   ;; Hidden on the finished screen, whose primary button leaves instead.
+   ;; Hidden, not removed, so nothing shifts.
+   [:button.wt-exit
+    {:type        "button"
+     :style       {:visibility (if finished? "hidden" "visible")}
+     :aria-hidden finished?
+     :on-click    #(re-frame/dispatch [::events/exit])}
+    "Exit"]
+   ;; The title moves to the list heading in the overview, and is hidden on
+   ;; the finished screen, whose card names the sequence itself.
+   [:div.wt-header-title
+    {:style {:visibility (if finished? "hidden" "visible")}}
+    (when-not overview?
+      [sequence-heading :p])]
+   [view-toggle overview?]])
+
+;; ---------------------------------------------------------------------------
+;; Overview: the same steps as a vertical list. Each row's marker is the
+;; same element as in the progress bar (shared view-transition-name), so
+;; toggling moves the dots between the two. View-only for the child.
+
+(defn- overview-list []
+  [:ol.overview
+   (for [{:keys [id title detail current? done?] :as m} @(re-frame/subscribe [::subs/overview-rows])]
+     ^{:key (str id)}
+     [:li.overview-row {:class [(when current? "is-current")
+                                (when done? "is-done")]}
+      [:span.overview-marker
+       [progress/marker m]
+       (when current?
+         [:span.overview-indicator
+          {:style {:view-transition-name progress/indicator-transition-name}}
+          [:span.indicator-shape]])]
+      [:span.overview-text
+       [:span.overview-title title]
+       (when detail
+         [:span.overview-detail detail])]])])
+
+(defn- overview []
+  [:div.overview-body
+   [sequence-heading :h1]
+   [overview-list]])
 
 ;; ---------------------------------------------------------------------------
 ;; Card
@@ -156,14 +214,20 @@
        [:span.up-next-title (if (= :finish kind) "All done!" title)]])))
 
 (defn walkthrough []
-  (let [finished? (= :finished @(re-frame/subscribe [::subs/phase]))]
-    [:div.walkthrough
-     [header finished?]
-     [:main.wt-main
-      [:div.wt-content
-       [card]]
-      [primary-button]]
-     [:footer.wt-footer
-      [back-button finished?]
-      [position finished?]
-      [up-next finished?]]]))
+  (let [finished? (= :finished @(re-frame/subscribe [::subs/phase]))
+        overview? @(re-frame/subscribe [::subs/overview?])]
+    (if overview?
+      [:div.walkthrough.is-overview
+       [header finished? overview?]
+       [:main.wt-overview
+        [overview]]]
+      [:div.walkthrough
+       [header finished? overview?]
+       [:main.wt-main
+        [:div.wt-content
+         [card]]
+        [primary-button]]
+       [:footer.wt-footer
+        [back-button finished?]
+        [position finished?]
+        [up-next finished?]]])))

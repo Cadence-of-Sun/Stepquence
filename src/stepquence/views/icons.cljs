@@ -15,6 +15,24 @@
    [:path {:fill "currentColor"
            :d    "M20 14.6A8.5 8.5 0 0 1 9.4 4a8.5 8.5 0 1 0 10.6 10.6Z"}]])
 
+(defn one-step
+  "A single card: the one-step view."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:rect {:x 5 :y 4 :width 14 :height 16 :rx 2.5
+           :fill "none" :stroke "currentColor" :stroke-width 2.2}]
+   [:path {:d "M9 12h6" :stroke "currentColor" :stroke-width 2.2 :stroke-linecap "round"}]])
+
+(defn all-steps
+  "A list of dotted rows: the overview."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   (for [y [6 12 18]]
+     ^{:key y}
+     [:g
+      [:circle {:cx 5 :cy y :r 2 :fill "currentColor"}]
+      [:path {:d (str "M10 " y "h10") :stroke "currentColor" :stroke-width 2.2 :stroke-linecap "round"}]])])
+
 (defn arrow-right []
   [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
    [:path {:fill            "none"

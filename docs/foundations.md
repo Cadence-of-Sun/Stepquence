@@ -29,7 +29,8 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - One step per screen as a focused card. Horizontal orientation; transitions move left-to-right.
 - Layout:
   ```
-  Exit                      (Part of <parent>)
+  Exit     <sequence title>     [one step / all steps]
+           (Part of <parent>)
         [ card: title, description, options ]
         [ primary button ]                    <- fixed position
   ← Back      3 of 7 / progress dots      Next: <title>
@@ -56,13 +57,22 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Screen Wake Lock API is active during walkthroughs.
 
 ## Overview
-- Toggle rearranges the same steps into a vertical list: fixed-size thumbnails, title, and the same progress dots with the same state.
+- Toggle rearranges the same steps into a vertical list: fixed-size thumbnails (once images exist), title, and the same progress dots with the same state.
+  - The toggle sits top right in the walkthrough and follows the theme toggle's pattern: both options shown (one step / all steps), the active one highlighted, pressing switches.
+  - The active sequence's title (and "Part of <parent>" inside a linked sequence) is the list's heading. In the step view it sits small in the header. It is one element with shared view-transition names (`sequence-title`, `sequence-context`), so it moves and scales between the two. The header title is centered in the viewport (aligned with the card below). On wide screens the header has three columns with equal sides; a side only grows to its button's width if a long title needs the room. On phones (under 40rem) the title takes its own full-width row under Exit and the toggle. It is hidden on the finished screen, whose card names the sequence.
+  - Each row: its marker, the title (link rows show the linked sequence's title), and for a choice row, the chosen option underneath. The current row is highlighted and has the position line under its dot.
+  - In the overview, the footer (Back, bar, Next) steps aside, since the dots now live in the list. Child mode: view-only. Parent mode will add jumping to a row and drag-to-reorder.
+  - Toggling is not a move: no card slide, no indicator arrow (`:nav-direction :none`).
+  - The current row is scrolled into view before the "after" snapshot.
 - The dots are shared elements between the overview list and the walkthrough progress bar, animated via the View Transitions API (`document.startViewTransition`).
   - Each dot gets `view-transition-name: step-dot-<id>`.
   - Off-screen dots animate from their computed positions. Consider per-dot durations to avoid long-distance dots moving too fast.
   - Unrendered elements (`display: none`, `content-visibility: auto`) only cross-fade.
   - A plain swap is the fallback where unsupported.
 - RE-FRAME GOTCHA: Reagent renders asynchronously. Inside the `startViewTransition` callback, dispatch and then force the DOM update (`reagent.core/flush`, or resolve a promise via `r/after-render`). Otherwise the "after" snapshot equals the "before" and nothing animates. Wrap this once as an effect handler, e.g. `:view-transition/dispatch`.
+  - Implemented as `:view-transition/dispatch` (`stepquence.fx`): `dispatch-sync` + `r/flush` inside the callback. The callback always runs after the triggering event finishes, so `dispatch-sync` is safe there. This relies on React 17's synchronous legacy render; moving to React 18's `createRoot` would also need `flushSync`.
+  - Shared names: markers use `step-dot-<id>` (`step-dot-requirements` for the checklist marker), and the position line uses `step-indicator`.
+  - Durations are currently uniform (500ms). Per-dot durations or staggering are still an option if long-distance dots feel too fast.
 
 ## Requirements ("What you need")
 - Optional per sequence: a vector of item references.

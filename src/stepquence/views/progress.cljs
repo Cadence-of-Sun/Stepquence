@@ -24,6 +24,22 @@
                     [:span.dot])
     [:span.dot]))
 
+(defn transition-name
+  "view-transition-name shared by a marker wherever it is rendered (bar or
+  overview list), so the View Transitions API animates it between them."
+  [id]
+  (str "step-dot-" (if (keyword? id) (name id) id)))
+
+(def indicator-transition-name "step-indicator")
+
+(defn marker
+  "One progress marker. `tag` lets the bar render it as a list item."
+  ([m] (marker :span.marker m))
+  ([tag {:keys [id done?] :as m}]
+   [tag {:class (when done? "is-done")
+         :style {:view-transition-name (transition-name id)}}
+    [marker-body m]]))
+
 (defn bar
   "Decorative: the position is announced by the text label above it.
 
@@ -36,14 +52,14 @@
     [:div.progress {:aria-hidden true
                     :style       {"--n" (count markers)}}
      [:ol.progress-markers
-      (for [{:keys [id done?] :as marker} markers]
-        ^{:key (str id)}
-        [:li.marker {:class (when done? "is-done")}
-         [marker-body marker]])]
+      (for [m markers]
+        ^{:key (str (:id m))}
+        [marker :li.marker m])]
      [:div.progress-indicator
       {:class (cond complete?     "is-complete"
                     (nil? current) "is-hidden")
-       :style {"--i" (or current 0)}}
+       :style {"--i"                  (or current 0)
+               :view-transition-name indicator-transition-name}}
       ;; Remounted on each move so its animation replays.
       ^{:key move-key}
       [:span.indicator-shape

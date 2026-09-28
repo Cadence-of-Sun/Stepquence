@@ -199,8 +199,9 @@
    [:persist? :boolean]
    ;; Tracks prefers-color-scheme; used while settings :theme is nil.
    [:system-theme [:enum :light :dark]]
-   ;; Which way the walkthrough card slides in.
-   [:nav-direction {:optional true} [:enum :forward :back]]
+   ;; Which way the walkthrough card slides in (and the indicator points).
+   ;; :none when the view changed without moving (overview toggle).
+   [:nav-direction {:optional true} [:enum :forward :back :none]]
    ;; Epoch ms; walkthrough input is ignored until then (double-tap guard).
    [:input-locked-until {:optional true} number?]])
 

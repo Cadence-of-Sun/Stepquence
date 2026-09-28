@@ -38,13 +38,13 @@
   ;; parent-mode settings exist.
   (let [showing @(re-frame/subscribe [::subs/theme-showing])
         other   (if (= :dark showing) "light" "dark")]
-    [:button.theme-toggle
+    [:button.theme-toggle.toggle
      {:type       "button"
       :aria-label (str "Switch to " other " theme")
       :on-click   #(re-frame/dispatch [::events/toggle-theme])}
-     [:span.theme-option {:class (when (= :light showing) "is-active")} [icons/sun]]
-     [:span.theme-slash "/"]
-     [:span.theme-option {:class (when (= :dark showing) "is-active")} [icons/moon]]]))
+     [:span.toggle-option {:class (when (= :light showing) "is-active")} [icons/sun]]
+     [:span.toggle-slash "/"]
+     [:span.toggle-option {:class (when (= :dark showing) "is-active")} [icons/moon]]]))
 
 (defn home []
   [:main.home

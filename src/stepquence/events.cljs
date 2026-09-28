@@ -119,6 +119,23 @@
             [[:wake-lock/request]])})))
 
 (re-frame/reg-event-fx
+ ::toggle-overview
+ ;; Between one step and all steps. The progress markers are shared
+ ;; elements, so they travel between the bar and the list.
+ (fn-traced [{:keys [db]} _]
+   {:fx [[:view-transition/dispatch
+          {:event            [::set-overview (not (get-in db [:ui :overview?]))]
+           :scroll-into-view ".overview-row.is-current"}]]}))
+
+(re-frame/reg-event-db
+ ::set-overview
+ ;; Not a move: no slide-in, no arrow when the step view remounts.
+ (fn-traced [db [_ overview?]]
+   (-> db
+       (assoc-in [:ui :overview?] overview?)
+       (assoc-in [:ui :nav-direction] :none))))
+
+(re-frame/reg-event-fx
  ::app-hidden
  (fn-traced [_ _]
    {:fx [[:storage/flush]]}))
@@ -187,13 +204,15 @@
        {:db (-> db
                 (assoc :run-stack [])
                 (begin-run sequence)
-                (assoc-in [:ui :screen] :walkthrough))
+                (assoc-in [:ui :screen] :walkthrough)
+                (assoc-in [:ui :overview?] false))
         :fx [[:wake-lock/request]]}))))
 
 (defn- leave-home [db]
   {:db (-> db
            (assoc :run nil :run-stack [])
-           (assoc-in [:ui :screen] :home))
+           (assoc-in [:ui :screen] :home)
+           (assoc-in [:ui :overview?] false))
    :fx [[:wake-lock/release]]})
 
 (defn- pop-run

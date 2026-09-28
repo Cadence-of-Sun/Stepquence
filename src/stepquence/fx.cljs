@@ -1,12 +1,49 @@
 (ns stepquence.fx
   "Effect and coeffect handlers for browser APIs."
   (:require
-   [re-frame.core :as re-frame]))
+   [re-frame.core :as re-frame]
+   [reagent.core :as r]))
 
 (re-frame/reg-cofx
  :now
  (fn [cofx]
    (assoc cofx :now (js/Date.now))))
+
+;; ---------------------------------------------------------------------------
+;; View transitions
+
+(defn- reduced-motion? []
+  (.-matches (js/matchMedia "(prefers-reduced-motion: reduce)")))
+
+(defn- scroll-into-view! [selector]
+  (when-let [el (and selector (.querySelector js/document selector))]
+    (.scrollIntoView el #js {:block "center"})))
+
+(re-frame/reg-fx
+ :view-transition/dispatch
+ ;; Handle `event` inside document.startViewTransition so the change
+ ;; animates (elements sharing a view-transition-name move between their
+ ;; old and new positions).
+ ;;
+ ;; Reagent renders asynchronously, so inside the callback the event is
+ ;; handled with dispatch-sync and the DOM forced with r/flush; otherwise
+ ;; the "after" snapshot would equal the "before" and nothing would move.
+ ;; (This relies on React 17's synchronous legacy render.) The callback
+ ;; always runs after the current event has finished, so dispatch-sync is
+ ;; safe there.
+ ;;
+ ;; `scroll-into-view` (a selector) is scrolled to before the "after"
+ ;; snapshot. Where the API is missing, or motion is reduced, the change is
+ ;; a plain swap.
+ (fn [{:keys [event scroll-into-view]}]
+   (if (and (.-startViewTransition js/document) (not (reduced-motion?)))
+     (.startViewTransition js/document
+                           (fn []
+                             (re-frame/dispatch-sync event)
+                             (r/flush)
+                             (scroll-into-view! scroll-into-view)))
+     (do (re-frame/dispatch event)
+         (r/after-render #(scroll-into-view! scroll-into-view))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Theme

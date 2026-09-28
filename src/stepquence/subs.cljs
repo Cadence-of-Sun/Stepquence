@@ -233,6 +233,29 @@
        true                (into (map-indexed step-marker) (:steps sequence))))))
 
 (re-frame/reg-sub
+ ::overview?
+ (fn [db]
+   (get-in db [:ui :overview?])))
+
+(re-frame/reg-sub
+ ::overview-rows
+ ;; The progress markers, each with its step's title; a choice row also
+ ;; carries the chosen option's title.
+ :<- [::progress-markers]
+ :<- [::content]
+ :<- [::run-sequence]
+ :<- [::run]
+ (fn [[markers content sequence r]]
+   (let [steps (into {} (map (juxt :id identity)) (:steps sequence))]
+     (for [{:keys [id kind] :as m} markers]
+       (assoc m
+              :title  (if (= :requirements kind)
+                        "What you need"
+                        (run/step-title content (steps id)))
+              :detail (when (= :choice kind)
+                        (get-in content [:items (get-in r [:choices id]) :title])))))))
+
+(re-frame/reg-sub
  ::link-steps
  ;; Steps of the sequence the current :link step points at.
  :<- [::content]
