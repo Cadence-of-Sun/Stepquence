@@ -404,6 +404,16 @@
                          reconcile-run))
        db))))
 
+(defn- offer-undo
+  "Add an undo offer to effects map `m`: pushed onto the undo stack for
+  undo-ms, with `restore` the event that reverses the change. Several
+  deletes in a row can each be undone, most recent first."
+  [m now message restore]
+  (let [token (+ now (count (get-in m [:db :ui :undo])) (rand))]
+    (-> m
+        (update-in [:db :ui :undo] (fnil conj []) {:message message :restore restore :token token})
+        (update :fx (fnil conj []) [:dispatch-later {:ms undo-ms :dispatch [::dismiss-undo token]}]))))
+
 (defn- follow-step
   "Keep the preview on the same step (not the same slot) after an edit."
   [db db' f]
@@ -438,6 +448,15 @@
         :fx [[:focus {:selector (str "[data-title-for=\"" new-id "\"]") :select? true}]]}))))
 
 (re-frame/reg-event-fx
+ ::add-link-step
+ ;; Only to a sequence that can't lead back here (see edit/linkable).
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} [_ target-id]]
+   (let [seq-id (get-in db [:run :sequence-id])]
+     (when (some #(= target-id (:id %)) (edit/linkable (:content db) seq-id))
+       {:db (edit-sequence db #(edit/add-link-step % new-id target-id) true)}))))
+
+(re-frame/reg-event-fx
  ::delete-step
  [(re-frame/inject-cofx :now)]
  (fn-traced [{:keys [db now]} [_ step-id]]
@@ -450,32 +469,38 @@
                                     sequence'))
                                 true)]
      (when @removed
-       {:db (-> (follow-step db db' #(edit/index-after-delete % (:index @removed)))
-                reconcile-run
-                (assoc-in [:ui :undo] {:message     "Step deleted"
-                                       :sequence-id seq-id
-                                       :restore     @removed
-                                       :token       now}))
-        :fx [[:dispatch-later {:ms undo-ms :dispatch [::dismiss-undo now]}]]}))))
+       (offer-undo {:db (-> (follow-step db db' #(edit/index-after-delete % (:index @removed)))
+                            reconcile-run)}
+                   now "Step deleted" [::restore-step seq-id @removed])))))
 
 (re-frame/reg-event-db
+ ::restore-step
+ (fn-traced [db [_ sequence-id restore]]
+   (cond-> db
+     (get-in db [:content :sequences sequence-id])
+     (-> (update-in [:content :sequences sequence-id] edit/restore-step restore)
+         (update-in [:day :resume] dissoc sequence-id)
+         (cond-> (= sequence-id (get-in db [:run :sequence-id]))
+           (update-in [:run :index] edit/index-after-insert (:index restore)))
+         reconcile-run))))
+
+(re-frame/reg-event-fx
  ::undo
- (fn-traced [db _]
-   (let [{:keys [sequence-id restore]} (get-in db [:ui :undo])]
-     (cond-> (assoc-in db [:ui :undo] nil)
-       (and sequence-id (get-in db [:ui :parent?]))
-       (-> (update-in [:content :sequences sequence-id] edit/restore-step restore)
-           (update-in [:day :resume] dissoc sequence-id)
-           (cond-> (= sequence-id (get-in db [:run :sequence-id]))
-             (update-in [:run :index] edit/index-after-insert (:index restore)))
-           reconcile-run)))))
+ (fn-traced [{:keys [db]} _]
+   ;; The most recent delete; earlier ones stay on offer until they expire.
+   (let [{:keys [restore]} (peek (get-in db [:ui :undo]))]
+     (when restore
+       {:db (update-in db [:ui :undo] pop)
+        :fx (when (get-in db [:ui :parent?])
+              [[:dispatch restore]])}))))
 
 (re-frame/reg-event-db
  ::dismiss-undo
  ;; Only the delete that scheduled it; a newer one keeps its own timer.
  (fn-traced [db [_ token]]
    (cond-> db
-     (= token (get-in db [:ui :undo :token])) (assoc-in [:ui :undo] nil))))
+     (get-in db [:ui :undo])
+     (update-in [:ui :undo] #(into [] (remove (fn [u] (= token (:token u)))) %)))))
 
 (re-frame/reg-event-fx
  ::move-step
@@ -515,3 +540,99 @@
  ;; view transition as the toggle.
  (fn-traced [_ [_ target]]
    {:fx [[:view-transition/dispatch {:event [::jump target]}]]}))
+
+;; ---------------------------------------------------------------------------
+;; Sequences and groups (parent mode only)
+
+(defn- parent? [db]
+  (get-in db [:ui :parent?]))
+
+(defn- edit-content
+  "Apply `f` to the content, in parent mode only."
+  [db f]
+  (cond-> db (parent? db) (update :content f)))
+
+(re-frame/reg-event-fx
+ ::new-sequence
+ ;; Creates it in `group-id` and opens it in the editor with its title
+ ;; selected, ready to be typed over.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} [_ group-id]]
+   (when (parent? db)
+     (let [sequence (edit/new-sequence new-id (random-uuid))]
+       {:db (-> db
+                (update :content edit/add-sequence group-id sequence)
+                (assoc :run-stack [])
+                (begin-run sequence)
+                (assoc-in [:ui :screen] :walkthrough)
+                (assoc-in [:ui :overview?] true))
+        :fx [[:wake-lock/request]
+             [:focus {:selector ".sequence-title-input" :select? true}]]}))))
+
+(re-frame/reg-event-fx
+ ::delete-sequence
+ ;; Refused while other sequences link to it (the editor says which).
+ ;; Leaves the walkthrough if it was the one open.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ sequence-id]]
+   (when (parent? db)
+     (let [[content undo] (edit/remove-sequence (:content db) sequence-id)]
+       (when undo
+         (let [db      (-> db
+                           (assoc :content content)
+                           (update-in [:day :resume] dissoc sequence-id)
+                           (update-in [:day :done] disj sequence-id))
+               leaving (= sequence-id (get-in db [:run :sequence-id]))]
+           (offer-undo (if leaving (leave-home db) {:db db})
+                       now "Sequence deleted" [::restore-sequence undo])))))))
+
+(re-frame/reg-event-db
+ ::restore-sequence
+ (fn-traced [db [_ undo]]
+   (edit-content db #(edit/restore-sequence % undo))))
+
+(re-frame/reg-event-db
+ ::set-sequence-group
+ (fn-traced [db [_ sequence-id group-id]]
+   (edit-content db #(edit/move-sequence-to-group % sequence-id group-id))))
+
+(re-frame/reg-event-db
+ ::set-sequence-days
+ (fn-traced [db [_ sequence-id days]]
+   (edit-content db #(update-in % [:sequences sequence-id] edit/set-days days))))
+
+(re-frame/reg-event-fx
+ ::new-group
+ ;; Added before Ungrouped, its name selected for typing over.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} _]
+   (when (parent? db)
+     {:db (edit-content db #(edit/add-group % new-id "New group"))
+      :fx [[:focus {:selector (str "[data-group-name-for=\"" new-id "\"]") :select? true}]]})))
+
+(re-frame/reg-event-db
+ ::rename-group
+ (fn-traced [db [_ group-id name]]
+   (edit-content db #(edit/rename-group % group-id name))))
+
+(re-frame/reg-event-fx
+ ::move-group
+ ;; `refocus` keeps keyboard focus on the button that was pressed.
+ (fn-traced [{:keys [db]} [_ group-id delta refocus]]
+   (cond-> {:db (edit-content db #(edit/move-group % group-id delta))}
+     refocus (assoc :fx [[:focus {:selector refocus}]]))))
+
+(re-frame/reg-event-fx
+ ::delete-group
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ group-id]]
+   (when (parent? db)
+     (let [[content undo] (edit/remove-group (:content db) group-id)]
+       (when undo
+         (offer-undo {:db (assoc db :content content)}
+                     now "Group deleted" [::restore-group undo]))))))
+
+(re-frame/reg-event-db
+ ::restore-group
+ (fn-traced [db [_ undo]]
+   (edit-content db #(edit/restore-group % undo))))

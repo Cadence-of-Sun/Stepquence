@@ -12,6 +12,16 @@
   (let [d (js/Date. (- now (* boundary-hour 60 60 1000)))]
     (str (.getFullYear d) "-" (pad2 (inc (.getMonth d))) "-" (pad2 (.getDate d)))))
 
+(def weekdays
+  "In Date.getDay order."
+  [:sun :mon :tue :wed :thu :fri :sat])
+
+(defn weekday
+  "Keyword weekday of a \"YYYY-MM-DD\" date."
+  [date]
+  (let [[y m d] (map js/parseInt (.split date "-"))]
+    (weekdays (.getDay (js/Date. y (dec m) d)))))
+
 (defn fresh [date]
   {:date date :done #{} :resume {}})
 

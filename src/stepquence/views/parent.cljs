@@ -113,3 +113,20 @@
       {:type     "button"
        :on-click #(re-frame/dispatch [::events/lock-parent])}
       "Lock"]]))
+
+;; ---------------------------------------------------------------------------
+;; Undo, for deletes on any screen
+
+(defn undo-toast
+  "The most recent delete that can still be undone; with more than one on
+  offer, a count."
+  []
+  (when-let [stack (seq @(re-frame/subscribe [::subs/undo]))]
+    [:div.undo-toast {:role "status"}
+     [:span (:message (last stack))
+      (when (> (count stack) 1)
+        [:span.undo-count (str " · " (count stack))])]
+     [:button.undo-button
+      {:type     "button"
+       :on-click #(re-frame/dispatch [::events/undo])}
+      "Undo"]]))

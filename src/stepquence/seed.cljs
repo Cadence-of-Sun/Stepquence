@@ -1,13 +1,11 @@
 (ns stepquence.seed
   "Sample content for development until parent-mode editing exists.
-  Ids are fixed so they stay stable across reloads.")
+  Ids are fixed so they stay stable across reloads."
+  (:require
+   [stepquence.schema :as schema]))
 
 (defn- id [n]
   (uuid (str "00000000-0000-4000-8000-" (.padStart (str n) 12 "0"))))
-
-(def ungrouped-id
-  "Well-known id of the default group. Deleting a group moves its sequences here."
-  (id 0))
 
 (def everyday #{:mon :tue :wed :thu :fri :sat :sun})
 (def weekdays #{:mon :tue :wed :thu :fri})
@@ -89,7 +87,7 @@
   [{:id (id 301) :name "Morning" :sequence-ids [(id 401) (id 402)]}
    {:id (id 302) :name "Afternoon" :sequence-ids [(id 403)]}
    {:id (id 303) :name "Evening" :sequence-ids [(id 404)]}
-   {:id ungrouped-id :name "Ungrouped" :sequence-ids []}])
+   {:id schema/ungrouped-id :name "Ungrouped" :sequence-ids []}])
 
 (def content
   {:sequences sequences

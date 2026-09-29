@@ -84,7 +84,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 
 ## Editing (parent mode)
 - The overview is the editor; the step view is the preview. Editing lives in one place.
-- Rows: drag handle, marker, title, description, delete, and → (preview that step). The row's dot also previews its step, like the dots in the step view.
+- Rows: drag handle, marker, title, description, delete, and → (preview that step). The row's dot also previews its step, like the dots in the step view. Titles wrap and grow (they run to 60 characters); Enter still saves.
   - Titles and descriptions are edited in place. Enter or leaving the field saves, Escape reverts, and a blank title reverts. The length caps apply as you type.
   - A step without a description shows a faint "+ Description". A cleared description is removed.
   - The sequence title (the overview heading) is editable too, and keeps its view-transition name.
@@ -95,6 +95,18 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Structural edits (add, delete, move, undo) clear today's resume position for that sequence, since it would point at the wrong step. The preview stays on the same step, not the same slot.
 - Step view in parent mode: the progress dots are buttons that jump anywhere in the preview.
 - Edits apply only in parent mode, to the sequence being previewed, and save like any other change.
+
+## Managing sequences and groups (parent mode)
+- The sequence list in parent mode shows every group, including empty ones, and every sequence, each with its schedule ("Weekdays", "Mon, Wed"). Sequences not scheduled today are dimmed and marked "not today".
+- Groups: the name is edited in place, ↑/↓ reorder, and delete moves the group's sequences to Ungrouped (undo moves them back). "+ New group" adds one just before Ungrouped with its name selected.
+  - Ungrouped is identified by a fixed id (`schema/ungrouped-id`), not its name. It can be renamed and moved, but not deleted, and it always receives the sequences of deleted groups. It is recreated if missing (e.g. from an import).
+- "+ New sequence" at the end of each group creates a sequence (one "New step", every day) and opens it in the editor with its title selected.
+- The editor's "Sequence settings" section (below the steps):
+  - Group: a dropdown. Moving appends to the new group. Reordering within a group isn't built yet.
+  - Days: presets (Every day / Weekdays / Weekends) plus seven day toggles. The day set is the single source of truth, so a preset is simply highlighted when the set matches it. With no days selected, a note says the sequence won't appear on the child's list.
+  - Delete sequence, with undo. It's refused while other sequences link to it, and the note names every one ("Get dressed (step 7), Bedtime (step 5) link to this sequence. Remove those steps first…"), per the no-dangling-references rule. Deleting also clears today's done and resume entries for it.
+- Undo is a short stack: each delete gets its own 6-second window. The toast (on any screen) shows the most recent, with a count when several are on offer ("Group deleted · 3"). Undo reverses the most recent, and the earlier ones stay on offer until they expire. Each entry carries the event that reverses it.
+- Adding a link step: a small link-icon button next to "+ Add step" (shown when there are at least two sequences) opens a picker. It lists only sequences that can't lead back to this one through links (not itself, and no loops at any depth), so the editor can't create a cycle. The walkthrough still guards against cycles in imported data.
 
 ## Requirements ("What you need")
 - Optional per sequence: a vector of item references.
@@ -137,6 +149,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 
 ## Daily tracking and schedules
 - Sequences have a schedule preset: every day / weekdays / weekends / custom days. There is no schedule library.
+  - The child's list shows only sequences scheduled today (weekday of the per-day date, so the day boundary applies). Groups with none today are hidden, and a group's checkmark counts only today's sequences.
 - The daily slice is `{:date "YYYY-MM-DD" :done #{seq-ids}}`. It resets when the stored date differs from today.
 - Configurable day boundary (default ~3am).
 - Check the date on load AND on `visibilitychange`/resume, since PWAs stay open for days. (Implemented: `stepquence.day/today` applies the boundary; a new date resets the done set and resume positions.)

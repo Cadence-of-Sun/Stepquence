@@ -1,8 +1,10 @@
 (ns stepquence.subs
   (:require
    [re-frame.core :as re-frame]
+   [stepquence.day :as day]
    [stepquence.edit :as edit]
-   [stepquence.run :as run]))
+   [stepquence.run :as run]
+   [stepquence.schema :as schema]))
 
 (re-frame/reg-sub
  ::content
@@ -44,27 +46,51 @@
 ;; Home
 
 (re-frame/reg-sub
- ::home-groups
- ;; Groups with their sequences, each annotated with today's progress:
- ;; :done-today? and :done-count (steps done so far, for a resumable run).
+ ::today
+ ;; Today's weekday (by the day boundary), or nil before storage loads.
+ :<- [::day]
+ (fn [{:keys [date]}]
+   (some-> date day/weekday)))
+
+(defn- annotate
+  "A sequence with today's state: :done-today?, :done-count (steps done so
+  far, for a resumable run), :today? (scheduled today) and :days-label."
+  [{:keys [done resume]} today {:keys [id steps days] :as sequence}]
+  (let [done? (contains? done id)]
+    (assoc sequence
+           :done-today? done?
+           :done-count  (if done? (count steps) (get-in resume [id :done-count] 0))
+           :today?      (or (nil? today) (contains? days today))
+           :days-label  (edit/days-summary days))))
+
+(re-frame/reg-sub
+ ::all-groups
+ ;; Every group with all its sequences (dangling ids skipped), annotated.
  :<- [::content]
  :<- [::day]
- (fn [[{:keys [groups sequences]} {:keys [done resume]}]]
-   ;; Resolve ids defensively: dangling references are skipped. Sequences
-   ;; without steps and empty groups are hidden from the child.
+ :<- [::today]
+ (fn [[{:keys [groups sequences]} d today]]
+   (let [n (count groups)]
+     (into []
+           (map-indexed
+            (fn [i group]
+              (assoc group
+                     :first?     (zero? i)
+                     :last?      (= i (dec n))
+                     :ungrouped? (= (:id group) schema/ungrouped-id)
+                     :sequences  (into [] (comp (keep sequences) (map #(annotate d today %)))
+                                       (:sequence-ids group)))))
+           groups))))
+
+(re-frame/reg-sub
+ ::home-groups
+ ;; What the child sees: sequences scheduled today (with steps), in groups
+ ;; that have any.
+ :<- [::all-groups]
+ (fn [groups]
    (into []
          (keep (fn [group]
-                 (let [seqs (into []
-                                  (comp (keep sequences)
-                                        (filter (comp seq :steps))
-                                        (map (fn [{:keys [id steps] :as sequence}]
-                                               (let [done? (contains? done id)]
-                                                 (assoc sequence
-                                                        :done-today? done?
-                                                        :done-count  (if done?
-                                                                       (count steps)
-                                                                       (get-in resume [id :done-count] 0)))))))
-                                  (:sequence-ids group))]
+                 (let [seqs (filterv #(and (:today? %) (seq (:steps %))) (:sequences group))]
                    (when (seq seqs)
                      (assoc group :sequences seqs)))))
          groups)))
@@ -274,6 +300,33 @@
                                  (get-in content [:collections (:collection-id step) :name]))
               :item-count      (when (= :requirements kind)
                                  (count (:requirements sequence))))))))
+
+(re-frame/reg-sub
+ ::sequence-settings
+ ;; For the editor's "Sequence" section.
+ :<- [::content]
+ :<- [::run-sequence]
+ (fn [[content {:keys [id days]}]]
+   (when id
+     {:id       id
+      :days     days
+      :group-id (some #(when (some #{id} (:sequence-ids %)) (:id %)) (:groups content))
+      :groups   (mapv #(select-keys % [:id :name]) (:groups content))
+      :links-to (vec (edit/links-to content id))})))
+
+(re-frame/reg-sub
+ ::sequence-count
+ :<- [::content]
+ (fn [content]
+   (count (:sequences content))))
+
+(re-frame/reg-sub
+ ::link-candidates
+ :<- [::content]
+ :<- [::run-sequence]
+ (fn [[content {:keys [id]}]]
+   (when id
+     (mapv #(select-keys % [:id :title :steps]) (edit/linkable content id)))))
 
 (re-frame/reg-sub
  ::can-add-step?

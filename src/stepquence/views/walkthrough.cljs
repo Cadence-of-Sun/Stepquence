@@ -106,8 +106,8 @@
     [:<>
      [editor/heading]
      [:div.overview-scroll
-      [editor/overview-editor]]
-     [editor/undo-toast]]
+      [editor/overview-editor]
+      [editor/sequence-settings]]]
     [:<>
      [sequence-heading :h1]
      [:div.overview-scroll

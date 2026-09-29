@@ -118,3 +118,21 @@
            :stroke-width   2.5
            :stroke-linecap "round"
            :d              "M12 5v14M5 12h14"}]])
+
+(defn chevron-up []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill "none" :stroke "currentColor" :stroke-width 2.5
+           :stroke-linecap "round" :stroke-linejoin "round" :d "M6 15l6-6 6 6"}]])
+
+(defn chevron-down []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill "none" :stroke "currentColor" :stroke-width 2.5
+           :stroke-linecap "round" :stroke-linejoin "round" :d "M6 9l6 6 6-6"}]])
+
+(defn link
+  "Two chain links: a step that walks through another sequence."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill "none" :stroke "currentColor" :stroke-width 2.2
+           :stroke-linecap "round" :stroke-linejoin "round"
+           :d "M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"}]])

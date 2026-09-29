@@ -15,4 +15,5 @@
       :loading     [:div.loading]
       :walkthrough [walkthrough/walkthrough]
       [home/home])]
+   [parent/undo-toast]
    [parent/pin-pad]])

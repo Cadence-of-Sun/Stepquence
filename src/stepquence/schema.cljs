@@ -14,6 +14,11 @@
   "Hard cap on steps per sequence."
   12)
 
+(def ungrouped-id
+  "Well-known id of the default group, which always exists. Sequences of a
+  deleted group move here."
+  (uuid "00000000-0000-4000-8000-000000000000"))
+
 (def schema-version
   "Bump when the persisted shape changes; import/boot migrate from older versions."
   1)
@@ -216,11 +221,12 @@
    ;; Epoch ms; walkthrough input is ignored until then (double-tap guard).
    [:input-locked-until {:optional true} number?]
    ;; The last delete, while it can still be undone.
-   [:undo {:optional true} [:maybe [:map
-                                    [:message :string]
-                                    [:sequence-id :uuid]
-                                    [:restore :map]
-                                    [:token number?]]]]
+   ;; Recent deletes that can still be undone, most recent last. Each
+   ;; `restore` is the event that reverses it; each expires on its own.
+   [:undo {:optional true} [:maybe [:vector [:map
+                                             [:message :string]
+                                             [:restore [:vector :any]]
+                                             [:token number?]]]]]
    ;; PIN pad state while it is open.
    [:pin-entry {:optional true} [:maybe PinEntry]]])
 

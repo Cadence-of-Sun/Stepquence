@@ -20,3 +20,7 @@
   (let [d {:date "2026-09-26" :done #{(random-uuid)} :resume {}}]
     (is (identical? d (day/roll-over d "2026-09-26")))
     (is (= (day/fresh "2026-09-27") (day/roll-over d "2026-09-27")))))
+
+(deftest weekday
+  (is (= :mon (day/weekday "2026-09-28")))
+  (is (= :sun (day/weekday "2026-09-27"))))

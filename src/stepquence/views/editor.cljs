@@ -9,51 +9,21 @@
    [clojure.string :as str]
    [re-frame.core :as re-frame]
    [reagent.core :as r]
+   [stepquence.edit :as edit]
    [stepquence.events :as events]
    [stepquence.schema :as schema]
    [stepquence.subs :as subs]
+   [stepquence.views.fields :as fields]
    [stepquence.views.icons :as icons]
    [stepquence.views.progress :as progress]))
 
 ;; ---------------------------------------------------------------------------
 ;; Text editing
 
-(defn- text-field
-  "Edits `value` in place: saved when the field loses focus or on Enter;
-  Escape reverts. A blank value reverts unless `allow-blank?`. `on-done`
-  runs on every blur. Callers key this on `value` so outside changes
-  (undo, clipping) remount it with the new text."
-  [{:keys [value on-commit on-done max-length multiline? allow-blank?
-           class label auto-focus? attrs]}]
-  (r/with-let [draft   (r/atom value)
-               commit! (fn []
-                         (let [v (str/trim @draft)]
-                           (if (or (= v value) (and (str/blank? v) (not allow-blank?)))
-                             (reset! draft value)
-                             (on-commit v))
-                           (when on-done (on-done))))]
-    [(if multiline? :textarea.text-field :input.text-field)
-     (merge {:class       class
-             :value       @draft
-             :max-length  max-length
-             :aria-label  label
-             :rows        (when multiline? 1)
-             :auto-focus  auto-focus?
-             :on-change   #(reset! draft (.. % -target -value))
-             :on-blur     commit!
-             :on-key-down (fn [e]
-                            (case (.-key e)
-                              "Enter"  (do (.preventDefault e)
-                                           (.blur (.-target e)))
-                              "Escape" (do (reset! draft value)
-                                           (.blur (.-target e)))
-                              nil))}
-            attrs)]))
-
 (defn- description-field [step-id description]
   (r/with-let [adding? (r/atom false)]
     (if (or description @adding?)
-      [text-field {:value        (or description "")
+      [fields/text-field {:value        (or description "")
                    :multiline?   true
                    :allow-blank? true
                    :max-length   schema/max-description
@@ -75,7 +45,7 @@
         parent-title @(re-frame/subscribe [::subs/parent-title])]
     [:div.sequence-heading
      ^{:key title}
-     [text-field {:value      title
+     [fields/text-field {:value      title
                   :max-length schema/max-name
                   :class      "sequence-heading-title sequence-title-input"
                   :label      "Sequence title"
@@ -211,7 +181,10 @@
         [:span.overview-detail "Linked sequence"]]
        [:<>
         ^{:key (str id "|" title)}
-        [text-field {:value      title
+        [fields/text-field {:value      title
+                     ;; Wraps and grows (titles run to 60 characters);
+                     ;; Enter still saves.
+                     :multiline? true
                      :max-length schema/max-step-title
                      :class      "overview-title-input"
                      :label      "Step title"
@@ -230,6 +203,49 @@
        :on-click   #(re-frame/dispatch [::events/delete-step id])}
       [icons/trash]]
      [go-button row]]]])
+
+(defn- link-picker
+  "Choose the sequence a new link step walks through."
+  [close!]
+  (let [candidates @(re-frame/subscribe [::subs/link-candidates])]
+    [:div.link-picker {:role "group" :aria-label "Link a sequence"}
+     [:p.link-picker-title "Link a sequence"]
+     (if (seq candidates)
+       [:ul.link-picker-list
+        (for [{:keys [id title steps]} candidates]
+          ^{:key (str id)}
+          [:li
+           [:button.link-choice
+            {:type     "button"
+             :on-click (fn []
+                         (close!)
+                         (re-frame/dispatch [::events/add-link-step id]))}
+            [:span.link-choice-title title]
+            [progress/mini-dots steps]]])]
+       [:p.setting-note "Every other sequence already leads back to this one, so linking would make a loop."])
+     [:button.link-picker-cancel {:type "button" :on-click close!} "Cancel"]]))
+
+(defn- add-row
+  "+ Add step, and beside it (with at least two sequences) a smaller button
+  to add a step that links another sequence."
+  []
+  (r/with-let [picking? (r/atom false)]
+    [:<>
+     [:div.add-row
+      [:button.add-step
+       {:type     "button"
+        :on-click #(re-frame/dispatch [::events/add-step])}
+       [icons/plus] "Add step"]
+      (when (>= @(re-frame/subscribe [::subs/sequence-count]) 2)
+        [:button.add-link
+         {:type          "button"
+          :aria-label    "Add a step that links another sequence"
+          :title         "Link a sequence"
+          :aria-expanded @picking?
+          :on-click      #(swap! picking? not)}
+         [icons/link]])]
+     (when @picking?
+       [link-picker #(reset! picking? false)])]))
 
 (defn overview-editor []
   (r/with-let [drag    (r/atom nil)
@@ -252,17 +268,68 @@
                           :can-delete? can-delete?}]))
        [:li.overview-add
         (if can-add?
-          [:button.add-step
-           {:type     "button"
-            :on-click #(re-frame/dispatch [::events/add-step])}
-           [icons/plus] "Add step"]
+          [add-row]
           [:p.add-step-full (str "A sequence can have up to " schema/max-steps " steps.")])]])))
 
-(defn undo-toast []
-  (when-let [{:keys [message]} @(re-frame/subscribe [::subs/undo])]
-    [:div.undo-toast {:role "status"}
-     [:span message]
-     [:button.undo-button
-      {:type     "button"
-       :on-click #(re-frame/dispatch [::events/undo])}
-      "Undo"]]))
+;; ---------------------------------------------------------------------------
+;; Sequence settings, below the steps
+
+(def ^:private week
+  [[:mon "Mon" "Monday"] [:tue "Tue" "Tuesday"] [:wed "Wed" "Wednesday"]
+   [:thu "Thu" "Thursday"] [:fri "Fri" "Friday"] [:sat "Sat" "Saturday"]
+   [:sun "Sun" "Sunday"]])
+
+(def ^:private presets
+  [["Every day" edit/every-day] ["Weekdays" edit/weekdays] ["Weekends" edit/weekends]])
+
+(defn sequence-settings []
+  (when-let [{:keys [id days group-id groups links-to]} @(re-frame/subscribe [::subs/sequence-settings])]
+    (let [set-days! #(re-frame/dispatch [::events/set-sequence-days id %])]
+      [:section.sequence-settings
+       [:h2.settings-heading "Sequence settings"]
+
+       [:div.setting
+        [:label.setting-label {:for "sequence-group"} "Group"]
+        [:select.setting-select
+         {:id        "sequence-group"
+          :value     (str group-id)
+          :on-change #(re-frame/dispatch [::events/set-sequence-group id (uuid (.. % -target -value))])}
+         (for [{gid :id gname :name} groups]
+           ^{:key (str gid)}
+           [:option {:value (str gid)} gname])]]
+
+       [:div.setting
+        [:span.setting-label {:id "sequence-days"} "Days"]
+        [:div.chips
+         (for [[label preset] presets]
+           ^{:key label}
+           [:button.chip {:type         "button"
+                          :aria-pressed (= days preset)
+                          :on-click     #(set-days! preset)}
+            label])]
+        [:div.chips.days {:role "group" :aria-labelledby "sequence-days"}
+         (for [[k short long] week]
+           ^{:key k}
+           [:button.chip.day
+            {:type         "button"
+             :aria-pressed (contains? days k)
+             :aria-label   long
+             :on-click     #(set-days! ((if (contains? days k) disj conj) days k))}
+            short])]
+        (when (empty? days)
+          [:p.setting-note "Not scheduled on any day, so it won't appear on the child's list."])]
+
+       [:div.setting
+        [:button.danger-button
+         {:type     "button"
+          :disabled (boolean (seq links-to))
+          :on-click #(re-frame/dispatch [::events/delete-sequence id])}
+         [icons/trash] "Delete sequence"]
+        (when (seq links-to)
+          [:p.setting-note
+           (let [one? (= 1 (count links-to))]
+             (str (str/join ", " (map #(str (:title %) " (step " (:step %) ")") links-to))
+                  (if one? " links" " link")
+                  " to this sequence. Remove "
+                  (if one? "that step" "those steps")
+                  " first to delete it."))])]])))

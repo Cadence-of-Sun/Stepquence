@@ -56,3 +56,63 @@
     (is (= 2 (edit/index-after-delete 2 2)))
     (is (= 3 (edit/index-after-insert 2 1)))
     (is (= 1 (edit/index-after-insert 1 3)))))
+
+;; Sequences and groups
+
+(def ungrouped stepquence.schema/ungrouped-id)
+
+(def content
+  {:sequences {:a {:id :a :title "A" :steps [{:id :a1 :kind :task :title "x"}]}
+               :b {:id :b :title "B" :steps [{:id :b1 :kind :link :sequence-id :a}]}
+               :c {:id :c :title "C" :steps [{:id :c1 :kind :task :title "y"}]}}
+   :groups    [{:id :g1 :name "Morning" :sequence-ids [:a :b]}
+               {:id :g2 :name "Evening" :sequence-ids [:c]}
+               {:id ungrouped :name "Ungrouped" :sequence-ids []}]})
+
+(defn- group-ids [content] (mapv (juxt :id :sequence-ids) (:groups content)))
+
+(deftest schedule-labels
+  (is (= "Every day" (edit/days-summary edit/every-day)))
+  (is (= "Weekdays" (edit/days-summary #{:mon :tue :wed :thu :fri})))
+  (is (= "Mon, Wed" (edit/days-summary #{:wed :mon})))
+  (is (= "No days" (edit/days-summary #{}))))
+
+(deftest removing-sequences
+  (testing "a linked sequence can't be removed"
+    (is (= [{:title "B" :step 1}] (vec (edit/links-to content :a))))
+    (is (= [content nil] (edit/remove-sequence content :a))))
+  (let [[after undo] (edit/remove-sequence content :b)]
+    (is (not (contains? (:sequences after) :b)))
+    (is (= [:a] (-> after :groups first :sequence-ids)))
+    (is (= content (edit/restore-sequence after undo))))
+  (testing "restoring when its group has gone lands in Ungrouped"
+    (let [[after undo] (edit/remove-sequence content :c)
+          [after _]    (edit/remove-group after :g2)]
+      (is (= [:c] (-> (edit/restore-sequence after undo) :groups last :sequence-ids))))))
+
+(deftest groups
+  (is (= [:g2 :new ungrouped]
+         (mapv :id (:groups (edit/add-group (update content :groups subvec 1) :new "New"))))
+      "new groups go before Ungrouped")
+  (is (= "Mornings" (-> (edit/rename-group content :g1 " Mornings ") :groups first :name)))
+  (is (= content (edit/rename-group content :g1 "  ")))
+  (is (= [:g2 :g1 ungrouped] (mapv :id (:groups (edit/move-group content :g1 1)))))
+  (is (= content (edit/move-group content :g1 -1)))
+  (testing "removing a group moves its sequences to Ungrouped; undo moves them back"
+    (let [[after undo] (edit/remove-group content :g1)]
+      (is (= [[:g2 [:c]] [ungrouped [:a :b]]] (group-ids after)))
+      (is (= (group-ids content) (group-ids (edit/restore-group after undo))))))
+  (is (= [content nil] (edit/remove-group content ungrouped)) "Ungrouped stays")
+  (is (= [[:g1 [:a :b :c]] [:g2 []] [ungrouped []]]
+         (group-ids (edit/move-sequence-to-group content :c :g1)))))
+
+(deftest linking
+  ;; In `content`, :b links to :a.
+  (is (edit/reaches? content :b :a))
+  (is (not (edit/reaches? content :a :b)))
+  (is (= [:a :c] (mapv :id (edit/linkable content :b))))
+  (testing "no loops: :a can't link to :b, which already leads back to :a"
+    (is (= [:c] (mapv :id (edit/linkable content :a)))))
+  (testing "deeper loops too: c -> b -> a, so :a can't link to :c either"
+    (let [content (update-in content [:sequences :c :steps] conj {:id :c2 :kind :link :sequence-id :b})]
+      (is (= [] (mapv :id (edit/linkable content :a)))))))
