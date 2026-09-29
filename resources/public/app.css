@@ -100,11 +100,16 @@ body,
 /* Banner (parent mode only) above the current screen. */
 .app {
   display: grid;
+  /* minmax(0, …): content can never widen the page past the viewport. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
 }
 
+/* Always the filling row, whether or not the banner is there. (Without
+   this, with no banner the screen would land in the content-sized row.) */
 .screen {
+  grid-row: 2;
   min-height: 0;
 }
 
@@ -387,11 +392,219 @@ button {
 /* ------------------------------------------------------------------------
    Parent mode */
 
-.parent-banner {
+/* Progress dots as jump buttons (parent preview). */
+.marker.is-selectable {
+  padding: 0;
+  border: none;
+  border-radius: 0.5rem;
+  background: none;
+}
+
+/* ------------------------------------------------------------------------
+   Editor (the overview in parent mode) */
+
+.text-field {
+  width: 100%;
+  padding: 0.1rem 0;
+  border: none;
+  border-bottom: 2px dashed var(--color-frame);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.text-field:focus {
+  outline: none;
+  border-bottom: 2px solid var(--color-accent);
+}
+
+.overview-title-input {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.overview-description-input {
+  min-height: 1.5em;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1.35;
+  resize: none;
+  field-sizing: content;
+}
+
+/* Sized to its text where supported, so it still reads as a heading. */
+.sequence-title-input {
+  min-width: 6ch;
+  text-align: center;
+  font-weight: 700;
+  field-sizing: content;
+}
+
+.overview.is-editing .overview-row-inner {
+  gap: var(--space-1);
+  padding-left: 0;
+  padding-right: 0.25rem;
+}
+
+.overview.is-editing .overview-text {
+  flex: 1;
+  gap: 0.2rem;
+}
+
+.add-description {
+  align-self: flex-start;
+  padding: 0.2rem 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.drag-handle,
+.drag-spacer {
+  flex: none;
+  width: 2.5rem;
+  height: 3rem;
+}
+
+.drag-handle {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 0.5rem;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: grab;
+  touch-action: none; /* the handle drags; it must not scroll the list */
+}
+
+.drag-handle .icon {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.overview.is-sorting {
+  user-select: none;
+}
+
+.overview.is-sorting .drag-handle {
+  cursor: grabbing;
+}
+
+/* Rows make way smoothly while another is dragged (only while sorting, so
+   the drop itself snaps into place). */
+.overview.is-sorting .overview-row:not(.is-dragging) {
+  transition: transform 180ms ease;
+}
+
+.overview-row.is-dragging {
+  position: relative;
+  z-index: 2;
+  background: var(--color-surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+.row-actions {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+}
+
+.row-action {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.row-action.is-go {
+  color: var(--color-accent);
+}
+
+.row-action:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.row-action .icon {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.overview-add {
+  margin-top: var(--space-1);
+}
+
+.add-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 3.5rem;
+  border: 2px dashed var(--color-muted);
+  border-radius: 0.75rem;
+  background: none;
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.add-step .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.add-step-full {
+  padding: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(var(--space-2), env(safe-area-inset-bottom));
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: 0.4rem 0.4rem 0.4rem 1.25rem;
+  border-radius: 999px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  transform: translateX(-50%);
+  animation: fade-in 200ms ease-out;
+}
+
+.undo-toast > span {
+  white-space: nowrap;
+}
+
+.undo-button {
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font-weight: 700;
+}
+
+.parent-banner {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   padding: 0.4rem var(--space-2);
+  font-size: 1rem;
   background: var(--color-accent-soft);
   color: var(--color-text);
 }
@@ -404,6 +617,7 @@ button {
 
 .parent-banner .toggle {
   min-height: 3rem;
+  padding: 0 0.6rem;
 }
 
 .parent-lock {
@@ -708,6 +922,13 @@ button {
 .overview-title {
   font-weight: 700;
   line-height: 1.2;
+}
+
+.overview-description {
+  margin-top: 0.15rem;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .overview-detail {

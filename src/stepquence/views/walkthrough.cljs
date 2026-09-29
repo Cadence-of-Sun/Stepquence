@@ -16,6 +16,7 @@
    [re-frame.core :as re-frame]
    [stepquence.events :as events]
    [stepquence.subs :as subs]
+   [stepquence.views.editor :as editor]
    [stepquence.views.icons :as icons]
    [stepquence.views.progress :as progress]))
 
@@ -71,7 +72,7 @@
 
 (defn- overview-list []
   [:ol.overview
-   (for [{:keys [id title detail current? done?] :as m} @(re-frame/subscribe [::subs/overview-rows])]
+   (for [{:keys [id title description detail current? done?] :as m} @(re-frame/subscribe [::subs/overview-rows])]
      ^{:key (str id)}
      [:li.overview-row {:class [(when current? "is-current")
                                 (when done? "is-done")]}
@@ -91,16 +92,26 @@
        [:span.overview-text
         [:span.overview-title title]
         (when detail
-          [:span.overview-detail detail])]
+          [:span.overview-detail detail])
+        ;; Only the current step's description, if it has one.
+        (when (and current? description)
+          [:span.overview-description description])]
        (when current?
          [:span.overview-go [icons/arrow-right]])]])])
 
 (defn- overview []
-  ;; Only the list scrolls; the heading stays in view above it.
-  [:<>
-   [sequence-heading :h1]
-   [:div.overview-scroll
-    [overview-list]]])
+  ;; Only the list scrolls; the heading stays in view above it. In parent
+  ;; mode the overview is the sequence editor.
+  (if @(re-frame/subscribe [::subs/parent?])
+    [:<>
+     [editor/heading]
+     [:div.overview-scroll
+      [editor/overview-editor]]
+     [editor/undo-toast]]
+    [:<>
+     [sequence-heading :h1]
+     [:div.overview-scroll
+      [overview-list]]]))
 
 ;; ---------------------------------------------------------------------------
 ;; Card
@@ -205,7 +216,10 @@
     @(re-frame/subscribe [::subs/progress-markers])
     {:move-key  @(re-frame/subscribe [::subs/card-key])
      :direction @(re-frame/subscribe [::subs/nav-direction])
-     :complete? finished?}]])
+     :complete? finished?
+     ;; Parent preview: the dots jump.
+     :on-select (when @(re-frame/subscribe [::subs/parent?])
+                  #(re-frame/dispatch [::events/jump %]))}]])
 
 (defn- up-next [finished?]
   (let [{:keys [kind title]} @(re-frame/subscribe [::subs/up-next])

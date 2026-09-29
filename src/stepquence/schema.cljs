@@ -215,6 +215,12 @@
    [:nav-direction {:optional true} [:enum :forward :back :none]]
    ;; Epoch ms; walkthrough input is ignored until then (double-tap guard).
    [:input-locked-until {:optional true} number?]
+   ;; The last delete, while it can still be undone.
+   [:undo {:optional true} [:maybe [:map
+                                    [:message :string]
+                                    [:sequence-id :uuid]
+                                    [:restore :map]
+                                    [:token number?]]]]
    ;; PIN pad state while it is open.
    [:pin-entry {:optional true} [:maybe PinEntry]]])
 

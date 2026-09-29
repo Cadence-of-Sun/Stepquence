@@ -66,6 +66,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - The toggle sits top right in the walkthrough and follows the theme toggle's pattern: both options shown (one step / all steps), the active one highlighted, pressing switches.
   - The active sequence's title (and "Part of <parent>" inside a linked sequence) is the list's heading. In the step view it sits small in the header. It is one element with shared view-transition names (`sequence-title`, `sequence-context`), so it moves and scales between the two. The header title is centered in the viewport (aligned with the card below). On wide screens the header has three columns with equal sides; a side only grows to its button's width if a long title needs the room. On phones (under 40rem) the title takes its own full-width row under Exit and the toggle. It is hidden on the finished screen, whose card names the sequence.
   - Each row: its marker, the title (link rows show the linked sequence's title), and for a choice row, the chosen option underneath. The current row is highlighted and has the position line under its dot.
+  - Descriptions: only the current row shows its description (if it has one), under the title. Showing every step's description would crowd the list.
   - In the overview, the footer (Back, bar, Next) steps aside, since the dots now live in the list. Child mode: view-only. Parent mode will add jumping to a row and drag-to-reorder.
   - Toggling is not a move: no card slide, no indicator arrow (`:nav-direction :none`).
   - The current row is a shortcut back to its step view: the whole row is a button, with a small → at its end, using the same transition as the toggle. (A Done in the overview was considered and rejected: steps complete in different ways, like a choice or a checklist, so the overview would need every mechanism. The overview is the map; the step view is where he acts.)
@@ -80,6 +81,20 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Implemented as `:view-transition/dispatch` (`stepquence.fx`): `dispatch-sync` + `r/flush` inside the callback. The callback always runs after the triggering event finishes, so `dispatch-sync` is safe there. This relies on React 17's synchronous legacy render; moving to React 18's `createRoot` would also need `flushSync`.
   - Shared names: markers use `step-dot-<id>` (`step-dot-requirements` for the checklist marker), and the position line uses `step-indicator`.
   - Shared elements move over 950ms with an ease-in-out curve (500ms felt rushed). The rest of the page cross-fades in 450ms, so the moving pieces lead. Per-dot durations or staggering are still an option if long-distance dots feel too fast.
+
+## Editing (parent mode)
+- The overview is the editor; the step view is the preview. Editing lives in one place.
+- Rows: drag handle, marker, title, description, delete, and → (preview that step). The row's dot also previews its step, like the dots in the step view.
+  - Titles and descriptions are edited in place. Enter or leaving the field saves, Escape reverts, and a blank title reverts. The length caps apply as you type.
+  - A step without a description shows a faint "+ Description". A cleared description is removed.
+  - The sequence title (the overview heading) is editable too, and keeps its view-transition name.
+  - Link rows show the linked sequence's title (not editable here). Choice rows show which collection they use. The requirements row shows its item count. Changing a choice's collection, a link's target or the requirement items waits for the library pickers.
+- "+ Add step" at the end appends a task step titled "New step", focused with the text selected, so typing replaces it. At the 12-step cap the row says so instead of disappearing.
+- Delete shows "Step deleted · Undo" for 6 seconds (no confirmation dialog). A sequence keeps at least one step.
+- Reorder: drag the handle, using pointer events so touch works (the handle has `touch-action: none`). The row follows the pointer, the rows it passes make way, dragging near the list's edges scrolls it, and the drop commits. Arrow keys on a focused handle move the step by one, and focus stays on the handle.
+- Structural edits (add, delete, move, undo) clear today's resume position for that sequence, since it would point at the wrong step. The preview stays on the same step, not the same slot.
+- Step view in parent mode: the progress dots are buttons that jump anywhere in the preview.
+- Edits apply only in parent mode, to the sequence being previewed, and save like any other change.
 
 ## Requirements ("What you need")
 - Optional per sequence: a vector of item references.

@@ -9,6 +9,22 @@
  (fn [cofx]
    (assoc cofx :now (js/Date.now))))
 
+(re-frame/reg-cofx
+ :new-id
+ (fn [cofx]
+   (assoc cofx :new-id (random-uuid))))
+
+(re-frame/reg-fx
+ :focus
+ ;; Focus the element matching {:selector …} once the pending render is
+ ;; done; with :select? true, also select its text (a freshly added step's
+ ;; placeholder title, ready to be typed over).
+ (fn [{:keys [selector select?]}]
+   (r/after-render
+    #(when-let [el (.querySelector js/document selector)]
+       (.focus el)
+       (when select? (.select el))))))
+
 ;; ---------------------------------------------------------------------------
 ;; View transitions
 

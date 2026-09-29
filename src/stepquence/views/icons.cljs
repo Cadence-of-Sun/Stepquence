@@ -94,3 +94,27 @@
   [:svg.finished-mark {:viewBox "0 0 64 64" :aria-hidden true}
    [:circle.finished-mark-circle {:cx 32 :cy 32 :r 28}]
    [:path.finished-mark-check {:d "M20 33.5l8 8 16-18"}]])
+
+(defn grip
+  "Drag handle: two columns of dots."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   (for [x [9 15] y [6 12 18]]
+     ^{:key (str x y)}
+     [:circle {:cx x :cy y :r 1.8 :fill "currentColor"}])])
+
+(defn trash []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:fill            "none"
+           :stroke          "currentColor"
+           :stroke-width    2
+           :stroke-linecap  "round"
+           :stroke-linejoin "round"
+           :d               "M4 7h16M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"}]])
+
+(defn plus []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:stroke         "currentColor"
+           :stroke-width   2.5
+           :stroke-linecap "round"
+           :d              "M12 5v14M5 12h14"}]])

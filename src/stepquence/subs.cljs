@@ -1,6 +1,7 @@
 (ns stepquence.subs
   (:require
    [re-frame.core :as re-frame]
+   [stepquence.edit :as edit]
    [stepquence.run :as run]))
 
 (re-frame/reg-sub
@@ -219,6 +220,7 @@
          (when (seq (:requirements sequence))
            {:id       :requirements
             :kind     :requirements
+            :target   :requirements
             :done?    ready?
             :current? (= :requirements phase)})
 
@@ -226,6 +228,7 @@
          (fn [i step]
            (let [marker {:id       (:id step)
                          :kind     (:kind step)
+                         :target   i
                          :done?    (< i done-count)
                          :current? (and (= :steps phase) (= i index))}]
              (if (= :choice (:kind step))
@@ -257,13 +260,37 @@
  :<- [::run]
  (fn [[markers content sequence r]]
    (let [steps (into {} (map (juxt :id identity)) (:steps sequence))]
-     (for [{:keys [id kind] :as m} markers]
+     (for [{:keys [id kind] :as m} markers
+           :let [step (steps id)]]
        (assoc m
-              :title  (if (= :requirements kind)
-                        "What you need"
-                        (run/step-title content (steps id)))
-              :detail (when (= :choice kind)
-                        (get-in content [:items (get-in r [:choices id]) :title])))))))
+              :title           (if (= :requirements kind)
+                                 "What you need"
+                                 (run/step-title content step))
+              :description     (:description step)
+              :detail          (when (= :choice kind)
+                                 (get-in content [:items (get-in r [:choices id]) :title]))
+              ;; For the editor:
+              :collection-name (when (= :choice kind)
+                                 (get-in content [:collections (:collection-id step) :name]))
+              :item-count      (when (= :requirements kind)
+                                 (count (:requirements sequence))))))))
+
+(re-frame/reg-sub
+ ::can-add-step?
+ :<- [::run-sequence]
+ (fn [sequence]
+   (edit/can-add-step? sequence)))
+
+(re-frame/reg-sub
+ ::can-delete-step?
+ :<- [::run-sequence]
+ (fn [sequence]
+   (edit/can-delete-step? sequence)))
+
+(re-frame/reg-sub
+ ::undo
+ (fn [db]
+   (get-in db [:ui :undo])))
 
 (re-frame/reg-sub
  ::link-steps

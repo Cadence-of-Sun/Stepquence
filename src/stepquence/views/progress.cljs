@@ -33,11 +33,14 @@
 (def indicator-transition-name "step-indicator")
 
 (defn marker
-  "One progress marker. `tag` lets the bar render it as a list item."
+  "One progress marker. `tag` lets the bar render it as a list item or a
+  button; `attrs` are merged in."
   ([m] (marker :span.marker m))
-  ([tag {:keys [id done?] :as m}]
-   [tag {:class (when done? "is-done")
-         :style {:view-transition-name (transition-name id)}}
+  ([tag m] (marker tag m nil))
+  ([tag {:keys [id done?] :as m} attrs]
+   [tag (merge {:class (when done? "is-done")
+                :style {:view-transition-name (transition-name id)}}
+               attrs)
     [marker-body m]]))
 
 (defn bar
@@ -46,15 +49,27 @@
   The current position is a line under the dot rather than a ring: a single
   element sliding between equal-width slots. `move-key` changes on every
   move; moving forward, the line briefly becomes an arrow. When the run is
-  `complete?`, the line grows to underline the whole bar."
-  [markers {:keys [move-key direction complete?]}]
+  `complete?`, the line grows to underline the whole bar.
+
+  With `on-select` (parent mode) each marker is a button, called with the
+  marker's :target, for jumping around the preview."
+  [markers {:keys [move-key direction complete? on-select]}]
   (let [current (first (keep-indexed (fn [i m] (when (:current? m) i)) markers))]
-    [:div.progress {:aria-hidden true
+    [:div.progress {:aria-hidden (not on-select)
                     :style       {"--n" (count markers)}}
      [:ol.progress-markers
-      (for [m markers]
-        ^{:key (str (:id m))}
-        [marker :li.marker m])]
+      (for [{:keys [target] :as m} markers]
+        (if on-select
+          ^{:key (str (:id m))}
+          [:li
+           [marker :button.marker.is-selectable m
+            {:type       "button"
+             :aria-label (if (= :requirements target)
+                           "Go to: What you need"
+                           (str "Go to step " (inc target)))
+             :on-click   #(on-select target)}]]
+          ^{:key (str (:id m))}
+          [marker :li.marker m]))]
      [:div.progress-indicator
       {:class (cond complete?     "is-complete"
                     (nil? current) "is-hidden")

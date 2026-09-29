@@ -4,6 +4,7 @@
    [stepquence.config :as config]
    [stepquence.day :as day]
    [stepquence.db :as db]
+   [stepquence.edit :as edit]
    [stepquence.fx]
    [stepquence.run :as run]
    [stepquence.schema :as schema]
@@ -365,6 +366,152 @@
                           (= :walkthrough (get-in db [:ui :screen])))
          db          (-> db
                          (assoc-in [:ui :parent?] false)
-                         (assoc-in [:ui :pin-entry] nil))]
+                         (assoc-in [:ui :pin-entry] nil)
+                         (assoc-in [:ui :undo] nil))]
      (-> (if previewing? (leave-home db) {:db db})
          (update :fx (fnil conj []) [:parent/idle-lock nil])))))
+
+;; ---------------------------------------------------------------------------
+;; Editing (parent mode only). Edits apply to the sequence being previewed,
+;; from the overview, which is the editor in parent mode.
+
+(def new-step-title "New step")
+
+(def undo-ms
+  "How long a delete can be undone."
+  6000)
+
+(defn- reconcile-run
+  "Keep the preview run's position valid after the steps change."
+  [db]
+  (let [n (count (get-in db [:content :sequences (get-in db [:run :sequence-id]) :steps]))]
+    (if (and (:run db) (pos? n))
+      (update db :run #(-> %
+                           (update :index min (dec n))
+                           (update :done-count min n)))
+      db)))
+
+(defn- edit-sequence
+  "Apply `f` to the previewed sequence, in parent mode only. Structural
+  edits (add, delete, move) also drop today's resume position for it,
+  which would otherwise point at the wrong step."
+  ([db f] (edit-sequence db f false))
+  ([db f structural?]
+   (let [seq-id (get-in db [:run :sequence-id])]
+     (if (and seq-id (get-in db [:ui :parent?]))
+       (cond-> (update-in db [:content :sequences seq-id] f)
+         structural? (-> (update-in [:day :resume] dissoc seq-id)
+                         reconcile-run))
+       db))))
+
+(defn- follow-step
+  "Keep the preview on the same step (not the same slot) after an edit."
+  [db db' f]
+  (if (and (:run db') (not (identical? db db')))
+    (update-in db' [:run :index] f)
+    db'))
+
+(re-frame/reg-event-db
+ ::edit-sequence-title
+ (fn-traced [db [_ title]]
+   (edit-sequence db #(edit/set-sequence-title % title))))
+
+(re-frame/reg-event-db
+ ::edit-step-title
+ (fn-traced [db [_ step-id title]]
+   (edit-sequence db #(edit/set-step-title % step-id title))))
+
+(re-frame/reg-event-db
+ ::edit-step-description
+ (fn-traced [db [_ step-id description]]
+   (edit-sequence db #(edit/set-step-description % step-id description))))
+
+(re-frame/reg-event-fx
+ ::add-step
+ ;; A task step titled "New step", with its title focused and selected so
+ ;; typing replaces it.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} _]
+   (let [db' (edit-sequence db #(edit/add-task-step % new-id new-step-title) true)]
+     (when-not (identical? db db')
+       {:db db'
+        :fx [[:focus {:selector (str "[data-title-for=\"" new-id "\"]") :select? true}]]}))))
+
+(re-frame/reg-event-fx
+ ::delete-step
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ step-id]]
+   (let [seq-id  (get-in db [:run :sequence-id])
+         removed (volatile! nil)
+         db'     (edit-sequence db
+                                (fn [sequence]
+                                  (let [[sequence' undo] (edit/delete-step sequence step-id)]
+                                    (vreset! removed undo)
+                                    sequence'))
+                                true)]
+     (when @removed
+       {:db (-> (follow-step db db' #(edit/index-after-delete % (:index @removed)))
+                reconcile-run
+                (assoc-in [:ui :undo] {:message     "Step deleted"
+                                       :sequence-id seq-id
+                                       :restore     @removed
+                                       :token       now}))
+        :fx [[:dispatch-later {:ms undo-ms :dispatch [::dismiss-undo now]}]]}))))
+
+(re-frame/reg-event-db
+ ::undo
+ (fn-traced [db _]
+   (let [{:keys [sequence-id restore]} (get-in db [:ui :undo])]
+     (cond-> (assoc-in db [:ui :undo] nil)
+       (and sequence-id (get-in db [:ui :parent?]))
+       (-> (update-in [:content :sequences sequence-id] edit/restore-step restore)
+           (update-in [:day :resume] dissoc sequence-id)
+           (cond-> (= sequence-id (get-in db [:run :sequence-id]))
+             (update-in [:run :index] edit/index-after-insert (:index restore)))
+           reconcile-run)))))
+
+(re-frame/reg-event-db
+ ::dismiss-undo
+ ;; Only the delete that scheduled it; a newer one keeps its own timer.
+ (fn-traced [db [_ token]]
+   (cond-> db
+     (= token (get-in db [:ui :undo :token])) (assoc-in [:ui :undo] nil))))
+
+(re-frame/reg-event-fx
+ ::move-step
+ ;; `refocus` (a selector) keeps keyboard focus on the moved row's handle.
+ (fn-traced [{:keys [db]} [_ from to refocus]]
+   (let [db' (edit-sequence db #(edit/move-step % from to) true)]
+     (cond-> {:db (follow-step db db' #(edit/index-after-move % from to))}
+       refocus (assoc :fx [[:focus {:selector refocus}]])))))
+
+(defn- position-of
+  "Linear position of a run, for telling which way a jump goes."
+  [{:keys [phase index]} n]
+  (case phase :requirements -1 :steps index :finished n))
+
+(re-frame/reg-event-db
+ ::jump
+ ;; Parent preview: go straight to a position (:requirements or a step
+ ;; index), from the progress dots or an overview row. Never records.
+ (fn-traced [db [_ target]]
+   (let [r (:run db)
+         n (count (get-in db [:content :sequences (:sequence-id r) :steps]))]
+     (if (and r (get-in db [:ui :parent?]))
+       (let [r' (if (= :requirements target)
+                  (assoc r :phase :requirements)
+                  (assoc r :phase :steps :index (min target (dec n))))]
+         (-> db
+             (assoc :run r')
+             (assoc-in [:ui :nav-direction]
+                       (let [a (position-of r n) b (position-of r' n)]
+                         (cond (< a b) :forward (> a b) :back :else :none)))
+             (assoc-in [:ui :overview?] false)))
+       db))))
+
+(re-frame/reg-event-fx
+ ::preview-step
+ ;; From an overview row: jump there and show the step view, with the same
+ ;; view transition as the toggle.
+ (fn-traced [_ [_ target]]
+   {:fx [[:view-transition/dispatch {:event [::jump target]}]]}))
