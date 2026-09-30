@@ -1049,6 +1049,52 @@ button {
   gap: var(--space-1);
 }
 
+/* The Things & lists screen */
+
+.things-section {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.things-section + .things-section {
+  margin-top: var(--space-4);
+}
+
+.things-section .group-name {
+  margin-bottom: 0;
+}
+
+/* Lists are mostly text: wider cards than the picture grid's. */
+.things-section .library-grid {
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+
+.thing-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.thing-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.5rem;
+  border: 1px solid var(--color-frame);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+}
+
+.thing-text {
+  display: grid;
+  flex: 1;
+  gap: 0.2rem;
+  min-width: 0;
+  font-size: 1rem;
+}
+
 /* Confirmation dialogs */
 
 .dialog-overlay {

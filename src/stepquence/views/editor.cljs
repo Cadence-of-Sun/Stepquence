@@ -562,27 +562,31 @@
     (when-let [{:keys [target kind title items others collection collections uses]}
                @(re-frame/subscribe [::subs/list-editor])]
       (let [close! #(do (reset! adding? false) (re-frame/dispatch [::events/close-list-editor]))
-            choice? (= :choice kind)]
+            choice? (= :choice kind)
+            list?   (= :list kind)]
         [:div.dialog-overlay
          [:div.dialog.picture-dialog {:role "dialog" :aria-modal true :aria-labelledby "list-title"}
           [:h2#list-title.dialog-title
-           (if choice? (str "Options for \"" title "\"") (str "What you need for \"" title "\""))]
-          (when choice?
+           (cond choice? (str "Options for \"" title "\"")
+                 list?   (str "The \"" title "\" list")
+                 :else   (str "What you need for \"" title "\""))]
+          (when (or choice? list?)
             [:div.setting
-             [:label.setting-label {:for "list-choice"} "List"]
-             [:select.setting-select
-              {:id        "list-choice"
-               :value     (str (:id collection))
-               :on-change (fn [e]
-                            (let [v (.. e -target -value)]
-                              (if (= v "new")
-                                (re-frame/dispatch [::events/new-list-for-step (:step-id target)])
-                                (re-frame/dispatch [::events/set-step-collection (:step-id target) (uuid v)]))))}
-              (when-not collection [:option {:value ""} "Choose a list…"])
-              (for [{cid :id cname :name} collections]
-                ^{:key (str cid)}
-                [:option {:value (str cid)} cname])
-              [:option {:value "new"} "New list"]]
+             (when choice? [:label.setting-label {:for "list-choice"} "List"])
+             (when choice?
+              [:select.setting-select
+               {:id        "list-choice"
+                :value     (str (:id collection))
+                :on-change (fn [e]
+                             (let [v (.. e -target -value)]
+                               (if (= v "new")
+                                 (re-frame/dispatch [::events/new-list-for-step (:step-id target)])
+                                 (re-frame/dispatch [::events/set-step-collection (:step-id target) (uuid v)]))))}
+               (when-not collection [:option {:value ""} "Choose a list…"])
+               (for [{cid :id cname :name} collections]
+                 ^{:key (str cid)}
+                 [:option {:value (str cid)} cname])
+               [:option {:value "new"} "New list"]])
              (when collection
                ^{:key (str (:id collection) (:name collection))}
                [fields/text-field {:value      (:name collection)
@@ -590,9 +594,10 @@
                                    :class      "list-name-input"
                                    :label      "List name"
                                    :on-commit  #(re-frame/dispatch [::events/rename-collection (:id collection) %])}])
-             (when (> (count uses) 1)
+             (when (or (> (count uses) 1) (and list? (seq uses)))
                [:p.setting-note (str "This list is used by " (count uses)
-                                     " choice steps; changes apply to all of them.")])])
+                                     (if (= 1 (count uses)) " choice step" " choice steps")
+                                     "; changes apply wherever it's used.")])])
           (if (seq items)
             [:ol.list-rows
              (for [[i item] (map-indexed vector items)]

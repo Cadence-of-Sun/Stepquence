@@ -570,3 +570,58 @@
   (if (can-add-step? sequence)
     (update sequence :steps conj {:id step-id :kind :choice :title title :collection-id collection-id})
     sequence))
+
+(defn- remove-at [v i]
+  (into (subvec v 0 i) (subvec v (inc i))))
+
+(defn- insert-at-index [v i x]
+  (let [i (max 0 (min i (count v)))]
+    (into (conj (subvec v 0 i) x) (subvec v i))))
+
+(defn remove-item
+  "Delete a thing: it comes off every checklist and list that has it.
+  Returns [content' undo] (undo remembers where it was on each)."
+  [content item-id]
+  (if-let [item (get-in content [:items item-id])]
+    (let [req-refs  (vec (for [s (vals (:sequences content))
+                               :let [i (.indexOf (or (:requirements s) []) item-id)]
+                               :when (>= i 0)]
+                           [(:id s) i]))
+          coll-refs (vec (for [c (vals (:collections content))
+                               :let [i (.indexOf (or (:item-ids c) []) item-id)]
+                               :when (>= i 0)]
+                           [(:id c) i]))]
+      [(as-> content c
+         (update c :items dissoc item-id)
+         (reduce (fn [c [sid i]] (update-in c [:sequences sid :requirements] remove-at i)) c req-refs)
+         (reduce (fn [c [cid i]] (update-in c [:collections cid :item-ids] remove-at i)) c coll-refs))
+       {:item item :req-refs req-refs :coll-refs coll-refs}])
+    [content nil]))
+
+(defn restore-item
+  "Undo remove-item: the thing returns to each list at its position (where
+  the sequence or list still exists)."
+  [content {:keys [item req-refs coll-refs]}]
+  (let [id (:id item)]
+    (as-> (assoc-in content [:items id] item) c
+      (reduce (fn [c [sid i]]
+                (cond-> c (get-in c [:sequences sid])
+                        (update-in [:sequences sid :requirements] insert-at-index i id)))
+              c req-refs)
+      (reduce (fn [c [cid i]]
+                (cond-> c (get-in c [:collections cid])
+                        (update-in [:collections cid :item-ids] insert-at-index i id)))
+              c coll-refs))))
+
+(defn remove-collection
+  "Delete a list; refused while a choice step uses it (per the deletion
+  policy: choose another list for that step first). [content' undo] or
+  [content nil]."
+  [content collection-id]
+  (let [coll (get-in content [:collections collection-id])]
+    (if (and coll (empty? (collection-uses content collection-id)))
+      [(update content :collections dissoc collection-id) {:collection coll}]
+      [content nil])))
+
+(defn restore-collection [content {:keys [collection]}]
+  (assoc-in content [:collections (:id collection)] collection))

@@ -194,3 +194,22 @@
         (is (= 1 (:items (edit/image-usage content :p))))
         (is (nil? (get-in after [:items :i1 :image-id])))
         (is (= content (edit/restore-image after undo)))))))
+
+(deftest deleting-things-and-lists
+  (let [content (-> content
+                    (assoc :items {:i1 {:id :i1 :title "Cup"} :i2 {:id :i2 :title "Spoon"}}
+                           :collections {:c1 {:id :c1 :name "Snacks" :item-ids [:i2 :i1]}
+                                         :c2 {:id :c2 :name "Unused" :item-ids []}})
+                    (assoc-in [:sequences :a :requirements] [:i1 :i2])
+                    (update-in [:sequences :c :steps] conj {:id :c9 :kind :choice :title "Pick" :collection-id :c1}))]
+    (testing "a thing comes off every checklist and list; undo puts it back in place"
+      (let [[after undo] (edit/remove-item content :i1)]
+        (is (= [:i2] (get-in after [:sequences :a :requirements])))
+        (is (= [:i2] (get-in after [:collections :c1 :item-ids])))
+        (is (not (contains? (:items after) :i1)))
+        (is (= content (edit/restore-item after undo)))))
+    (testing "a list in use can't be deleted"
+      (is (= [content nil] (edit/remove-collection content :c1))))
+    (let [[after undo] (edit/remove-collection content :c2)]
+      (is (not (contains? (:collections after) :c2)))
+      (is (= content (edit/restore-collection after undo))))))

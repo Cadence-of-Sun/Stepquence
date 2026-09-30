@@ -167,3 +167,11 @@
    [:rect {:x 3 :y 4.5 :width 18 :height 15 :rx 2.5}]
    [:circle {:cx 9 :cy 10 :r 1.8}]
    [:path {:d "M3.5 17l5-4.5 3.5 3 3-2.5 5.5 4.5"}]])
+
+(defn tag
+  "A luggage tag: the Things & lists screen."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor"
+              :stroke-width 2 :stroke-linecap "round" :stroke-linejoin "round"}
+   [:path {:d "M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-6.3 6.3a1.5 1.5 0 0 1-2.1 0z"}]
+   [:circle {:cx 8.5 :cy 8.5 :r 1.6}]])

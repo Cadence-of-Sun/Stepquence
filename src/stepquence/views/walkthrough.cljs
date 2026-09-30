@@ -112,9 +112,7 @@
      [editor/heading]
      [:div.overview-scroll
       [editor/overview-editor]
-      [editor/sequence-settings]]
-     [editor/list-dialog]
-     [editor/picture-dialog]]
+      [editor/sequence-settings]]]
     [:<>
      [sequence-heading :h1]
      [:div.overview-scroll

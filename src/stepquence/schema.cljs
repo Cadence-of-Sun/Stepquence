@@ -214,7 +214,7 @@
 
 (def Ui
   [:map
-   [:screen [:enum :loading :home :walkthrough :library]]
+   [:screen [:enum :loading :home :walkthrough :library :things]]
    [:parent? :boolean]
    [:overview? :boolean]
    ;; Storage has loaded and saving is on (false before load, or when

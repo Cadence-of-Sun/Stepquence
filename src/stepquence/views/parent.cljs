@@ -327,14 +327,22 @@
      [:span.parent-banner-label "Parent mode"]
      ;; Dedicated editing screens get their own buttons; Settings keeps
      ;; backup, install and the version.
-     (let [on-library? (= :library @(re-frame/subscribe [::subs/screen]))]
-       [:button.banner-button
-        {:type         "button"
-         :title        "Pictures"
-         :aria-label   "Pictures"
-         :aria-pressed on-library?
-         :on-click     #(re-frame/dispatch [(if on-library? ::events/close-library ::events/open-library)])}
-        [icons/image]])
+     (let [screen @(re-frame/subscribe [::subs/screen])]
+       [:<>
+        [:button.banner-button
+         {:type         "button"
+          :title        "Pictures"
+          :aria-label   "Pictures"
+          :aria-pressed (= :library screen)
+          :on-click     #(re-frame/dispatch [(if (= :library screen) ::events/close-library ::events/open-library)])}
+         [icons/image]]
+        [:button.banner-button
+         {:type         "button"
+          :title        "Things & lists"
+          :aria-label   "Things & lists"
+          :aria-pressed (= :things screen)
+          :on-click     #(re-frame/dispatch [(if (= :things screen) ::events/close-library ::events/open-things)])}
+         [icons/tag]]])
      [settings-panel]
      [:button.parent-lock
       {:type     "button"

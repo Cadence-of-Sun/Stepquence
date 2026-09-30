@@ -403,14 +403,16 @@
  (fn [[state run-seq content]]
    (when-let [{:keys [target]} state]
      (let [step      (when-let [sid (:step-id target)] (some #(when (= sid (:id %)) %) (:steps run-seq)))
-           cid       (:collection-id step)
-           ids       (if (:step-id target)
+           cid       (or (:collection target) (:collection-id step))
+           ids       (if cid
                        (get-in content [:collections cid :item-ids] [])
                        (get-in content [:sequences (:requirements target) :requirements] []))
            on-list   (set ids)]
        {:target      target
-        :kind        (if (:step-id target) :choice :checklist)
-        :title       (if step (:title step) (get-in content [:sequences (:requirements target) :title]))
+        :kind        (cond (:step-id target) :choice (:collection target) :list :else :checklist)
+        :title       (cond step                 (:title step)
+                           (:collection target) (get-in content [:collections cid :name])
+                           :else                (get-in content [:sequences (:requirements target) :title]))
         :items       (into [] (keep (:items content)) ids)
         :others      (->> (vals (:items content))
                           (remove #(on-list (:id %)))
@@ -430,6 +432,20 @@
         (mapv #(merge % {:uses (edit/image-uses content (:id %))}
                       (let [{:keys [steps sequences items]} (edit/image-usage content (:id %))]
                         {:usage-steps steps :usage-sequences sequences :usage-items items}))))))
+
+(re-frame/reg-sub
+ ::things-library
+ ;; Everything for the Things & lists screen, alphabetically, with usage.
+ :<- [::content]
+ (fn [content]
+   {:collections (->> (vals (:collections content))
+                      (sort-by (comp str/lower-case :name))
+                      (mapv #(assoc %
+                                    :item-titles (vec (keep (fn [iid] (get-in content [:items iid :title])) (:item-ids %)))
+                                    :uses (edit/collection-uses content (:id %)))))
+    :items       (->> (vals (:items content))
+                      (sort-by (comp str/lower-case :title))
+                      (mapv #(assoc % :uses (edit/item-uses content (:id %)))))}))
 
 (re-frame/reg-sub
  ::library-status

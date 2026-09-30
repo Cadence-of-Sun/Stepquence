@@ -410,7 +410,7 @@
                          (assoc-in [:ui :picture-editor] nil)
                          (assoc-in [:ui :export] nil)
                          (assoc-in [:ui :list-editor] nil)
-                         (cond-> (= :library (get-in db [:ui :screen])) (assoc-in [:ui :screen] :home)))]
+                         (cond-> (#{:library :things} (get-in db [:ui :screen])) (assoc-in [:ui :screen] :home)))]
      (-> (if previewing? (leave-home db) {:db db})
          (update :fx (fnil conj []) [:parent/idle-lock nil])))))
 
@@ -1015,6 +1015,13 @@
                       (assoc-in [:ui :selection] nil)))))
 
 (re-frame/reg-event-db
+ ::open-things
+ (fn-traced [db _]
+   (cond-> db
+     (parent? db) (-> (assoc-in [:ui :screen] :things)
+                      (assoc-in [:ui :selection] nil)))))
+
+(re-frame/reg-event-db
  ::close-library
  (fn-traced [db _]
    (assoc-in db [:ui :screen] :home)))
@@ -1179,3 +1186,56 @@
                              (edit-sequence #(edit/add-choice-step % new-id collection-id "Choose one") true))]
        (when (some #(= new-id (:id %)) (get-in db' [:content :sequences (get-in db [:run :sequence-id]) :steps]))
          {:db (assoc-in db' [:ui :list-editor] {:target {:step-id new-id}})})))))
+
+;; ---------------------------------------------------------------------------
+;; The Things & lists screen
+
+(re-frame/reg-event-fx
+ ::new-list
+ ;; An empty list, opened for filling in (its name selected).
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} _]
+   (when (parent? db)
+     {:db (-> db
+              (update :content edit/add-collection new-id "New list")
+              (assoc-in [:ui :list-editor] {:target {:collection new-id}}))
+      :fx [[:focus {:selector ".list-name-input" :select? true}]]})))
+
+(re-frame/reg-event-fx
+ ::new-thing
+ ;; A thing on no list yet, its name selected for typing over.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} _]
+   (when (parent? db)
+     {:db (update db :content assoc-in [:items new-id] {:id new-id :title "New thing"})
+      :fx [[:focus {:selector (str "[data-item-for=\"" new-id "\"]") :select? true}]]})))
+
+(re-frame/reg-event-fx
+ ::delete-item
+ ;; Off every checklist and list (the deletion policy); undoable.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ item-id]]
+   (when (parent? db)
+     (let [[content undo] (edit/remove-item (:content db) item-id)]
+       (when undo
+         (offer-undo {:db (assoc db :content content)} now "Thing deleted" [::restore-item undo]))))))
+
+(re-frame/reg-event-db
+ ::restore-item
+ (fn-traced [db [_ undo]]
+   (edit-content db #(edit/restore-item % undo))))
+
+(re-frame/reg-event-fx
+ ::delete-collection
+ ;; Refused while a choice step uses it; undoable.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ collection-id]]
+   (when (parent? db)
+     (let [[content undo] (edit/remove-collection (:content db) collection-id)]
+       (when undo
+         (offer-undo {:db (assoc db :content content)} now "List deleted" [::restore-collection undo]))))))
+
+(re-frame/reg-event-db
+ ::restore-collection
+ (fn-traced [db [_ undo]]
+   (edit-content db #(edit/restore-collection % undo))))
