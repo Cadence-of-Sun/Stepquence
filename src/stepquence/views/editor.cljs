@@ -205,7 +205,7 @@
         [:input {:type      "checkbox"
                  :checked   (boolean timer-required?)
                  :on-change #(re-frame/dispatch [::events/set-step-timer-required id (.. % -target -checked)])}]
-        "Finish before Done"])]))
+        "Must finish timer"])]))
 
 (defn- step-row [{:keys [id kind title description target current? done? collection-name] :as row}
                  {:keys [transform dragging? handle can-delete?]}]

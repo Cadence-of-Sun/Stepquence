@@ -149,7 +149,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Tap-to-start. Never auto-start: he looks at the picture first, then the text.
 - Reset (and possibly pause) controls.
 - The timer is for the action, not the step: it never auto-advances, and by default never gates Done.
-  - Opt-in per step: "Finish before Done" (editor, shown when the step has a timer). Done then shows the "not yet" style until the timer has finished once during this run, then wakes like Ready. The run remembers it (`:timers-done`), so going back and forth or resetting afterwards doesn't re-lock it. Revisited (already done) steps are never locked.
+  - Opt-in per step: "Must finish timer" (editor, shown when the step has a timer; renamed from "Finish before Done", which could be read as the child finishing before the timer). Done then shows the "not yet" style until the timer has finished once during this run, then wakes like Ready. The run remembers it (`:timers-done`), so going back and forth or resetting afterwards doesn't re-lock it. Revisited (already done) steps are never locked.
 - A visual emptying ring/wedge; gentle visual cue at zero, with optional sound.
 - Timer state is ephemeral.
 - Built (`stepquence.timer`, `views.timer`, `stepquence.sound`):
