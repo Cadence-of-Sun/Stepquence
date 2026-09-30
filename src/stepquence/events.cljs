@@ -12,6 +12,7 @@
    [stepquence.schema :as schema]
    [stepquence.share :as share]
    [stepquence.storage :as storage]
+   [stepquence.transfer]
    [day8.re-frame.tracing :refer-macros [fn-traced]]))
 
 (def check-app-db
@@ -406,7 +407,9 @@
                          (assoc-in [:ui :undo] nil)
                          (assoc-in [:ui :selection] nil)
                          (assoc-in [:ui :import] nil)
-                         (assoc-in [:ui :picture-editor] nil))]
+                         (assoc-in [:ui :picture-editor] nil)
+                         (assoc-in [:ui :export] nil)
+                         (cond-> (= :library (get-in db [:ui :screen])) (assoc-in [:ui :screen] :home)))]
      (-> (if previewing? (leave-home db) {:db db})
          (update :fx (fnil conj []) [:parent/idle-lock nil])))))
 
@@ -679,22 +682,57 @@
 ;; ---------------------------------------------------------------------------
 ;; Backup: export, and import as a full restore (parent mode only)
 
+(def ^:private export-callbacks
+  {:on-prompt [::export-prompt]
+   :on-error  [::export-failed]})
+
 (re-frame/reg-event-fx
  ::export-backup
- ;; Dispatched with dispatch-sync from the click, so the share sheet opens
- ;; within the user gesture.
+ ;; Dispatched with dispatch-sync from the click, so preparing starts
+ ;; within the tap (see stepquence.transfer for how sharing follows).
  [(re-frame/inject-cofx :now)]
  (fn-traced [{:keys [db now]} _]
    (when (parent? db)
-     {:fx [[:file/export {:text     (backup/encode db now)
-                          :filename (backup/filename now)
-                          :title    "Stepquence backup"
-                          :on-done  [::backup-exported now]}]]})))
+     {:db (assoc-in db [:ui :export] {:status :preparing})
+      :fx [[:transfer/export (merge export-callbacks
+                                    {:kind :backup :db db :now now
+                                     :on-done [::backup-exported now]})]]})))
 
 (re-frame/reg-event-db
  ::backup-exported
  (fn-traced [db [_ at]]
-   (assoc-in db [:meta :last-backup-at] at)))
+   (-> db
+       (assoc-in [:meta :last-backup-at] at)
+       (assoc-in [:ui :export] nil))))
+
+(re-frame/reg-event-db
+ ::export-prompt
+ ;; Prepared, but the tap no longer counts for sharing: ask for one more.
+ (fn-traced [db _]
+   (assoc-in db [:ui :export] {:status :ready})))
+
+(re-frame/reg-event-fx
+ ::share-prepared
+ ;; The prompt's Share button (dispatch-sync, within its click).
+ (fn-traced [{:keys [db]} _]
+   {:db (assoc-in db [:ui :export] nil)
+    :fx [[:transfer/share-pending]]}))
+
+(re-frame/reg-event-fx
+ ::export-cancel
+ (fn-traced [{:keys [db]} _]
+   {:db (assoc-in db [:ui :export] nil)
+    :fx [[:transfer/drop-pending]]}))
+
+(re-frame/reg-event-db
+ ::export-failed
+ (fn-traced [db _]
+   (assoc-in db [:ui :export] {:status :error})))
+
+(re-frame/reg-event-db
+ ::export-done
+ (fn-traced [db _]
+   (assoc-in db [:ui :export] nil)))
 
 (re-frame/reg-event-db
  ::import-read
@@ -725,6 +763,21 @@
 
 (re-frame/reg-event-fx
  ::import-confirm
+ ;; The backup's pictures are stored first; only then is anything changed.
+ (fn-traced [{:keys [db]} _]
+   (when-let [data (and (parent? db) (get-in db [:ui :import :data]))]
+     {:db (assoc-in db [:ui :import :busy?] true)
+      :fx [[:images/import-data {:image-data (:image-data data)
+                                 :on-done    [::import-commit]
+                                 :on-error   [::import-failed]}]]})))
+
+(re-frame/reg-event-db
+ ::import-failed
+ (fn-traced [db [_ message]]
+   (assoc-in db [:ui :import] {:error message})))
+
+(re-frame/reg-event-fx
+ ::import-commit
  ;; Keeps a copy of the current data first, then replaces everything. Can
  ;; also be undone for a few seconds.
  [(re-frame/inject-cofx :now)]
@@ -773,10 +826,17 @@
  [(re-frame/inject-cofx :now)]
  (fn-traced [{:keys [db now]} [_ ids]]
    (when (and (parent? db) (seq ids))
-     {:fx [[:file/export {:text     (share/encode (:content db) ids now)
-                          :filename (share/filename (:content db) ids now)
-                          :title    "Stepquence sequences"
-                          :on-done  [::stop-selecting]}]]})))
+     {:db (assoc-in db [:ui :export] {:status :preparing})
+      :fx [[:transfer/export (merge export-callbacks
+                                    {:kind :sequences :db db :ids ids :now now
+                                     :on-done [::sequences-exported]})]]})))
+
+(re-frame/reg-event-db
+ ::sequences-exported
+ (fn-traced [db _]
+   (-> db
+       (assoc-in [:ui :export] nil)
+       (assoc-in [:ui :selection] nil))))
 
 (re-frame/reg-event-db
  ::merge-choice
@@ -791,6 +851,17 @@
 
 (re-frame/reg-event-fx
  ::merge-confirm
+ ;; The file's pictures are stored first; only then is anything changed.
+ (fn-traced [{:keys [db]} _]
+   (let [{:keys [kind data]} (get-in db [:ui :import])]
+     (when (and (parent? db) (= :sequences kind))
+       {:db (assoc-in db [:ui :import :busy?] true)
+        :fx [[:images/import-data {:image-data (:image-data data)
+                                   :on-done    [::merge-commit]
+                                   :on-error   [::import-failed]}]]}))))
+
+(re-frame/reg-event-fx
+ ::merge-commit
  ;; Adds the shared sequences (and their items, collections, groups);
  ;; can be undone for a few seconds.
  [(re-frame/inject-cofx :now)]
@@ -858,13 +929,27 @@
         :fx [[:focus {:selector (str "[data-group-name-for=\"" new-id "\"]") :select? true}]]}))))
 
 ;; ---------------------------------------------------------------------------
-;; Step pictures (parent mode). The picture dialog edits one step of the
-;; previewed sequence; files are processed and stored by :images/import.
+;; Pictures (parent mode). The picture dialog edits one target: a step of
+;; the previewed sequence ({:step-id …}) or a sequence's card picture
+;; ({:sequence-id …}). Files are processed and stored by :images/import.
+
+(defn- apply-picture
+  "Put library picture `image-id` on `target` (nil removes it)."
+  [db {:keys [step-id sequence-id]} image-id]
+  (cond
+    step-id     (edit-sequence db #(if image-id
+                                     (edit/set-step-image % step-id image-id)
+                                     (edit/clear-step-image % step-id)))
+    sequence-id (edit-content db #(update-in % [:sequences sequence-id]
+                                             (fn [s] (when s (if image-id
+                                                               (edit/set-sequence-image s image-id)
+                                                               (edit/clear-sequence-image s))))))
+    :else       db))
 
 (re-frame/reg-event-db
  ::open-picture-editor
- (fn-traced [db [_ step-id]]
-   (cond-> db (parent? db) (assoc-in [:ui :picture-editor] {:step-id step-id}))))
+ (fn-traced [db [_ target]]
+   (cond-> db (parent? db) (assoc-in [:ui :picture-editor] {:target target}))))
 
 (re-frame/reg-event-db
  ::close-picture-editor
@@ -874,38 +959,38 @@
 (re-frame/reg-event-fx
  ::picture-file-chosen
  [(re-frame/inject-cofx :new-id)]
- (fn-traced [{:keys [db new-id]} [_ step-id file]]
+ (fn-traced [{:keys [db new-id]} [_ target file]]
    (when (parent? db)
-     {:db (assoc-in db [:ui :picture-editor] {:step-id step-id :busy? true})
+     {:db (assoc-in db [:ui :picture-editor] {:target target :busy? true})
       :fx [[:images/import {:file     file
                             :id       new-id
-                            :on-done  [::picture-imported step-id]
-                            :on-error [::picture-import-failed step-id]}]]})))
+                            :on-done  [::picture-imported target]
+                            :on-error [::picture-import-failed target]}]]})))
 
 (re-frame/reg-event-db
  ::picture-imported
- ;; Into the library, and onto the step.
- (fn-traced [db [_ step-id image]]
+ ;; Into the library, and onto the target.
+ (fn-traced [db [_ target image]]
    (-> db
        (edit-content #(assoc-in % [:images (:id image)] image))
-       (edit-sequence #(edit/set-step-image % step-id (:id image)))
-       (assoc-in [:ui :picture-editor] (when (get-in db [:ui :picture-editor]) {:step-id step-id})))))
+       (apply-picture target (:id image))
+       (assoc-in [:ui :picture-editor] (when (get-in db [:ui :picture-editor]) {:target target})))))
 
 (re-frame/reg-event-db
  ::picture-import-failed
- (fn-traced [db [_ step-id message]]
-   (assoc-in db [:ui :picture-editor] {:step-id step-id :error message})))
+ (fn-traced [db [_ target message]]
+   (assoc-in db [:ui :picture-editor] {:target target :error message})))
 
 (re-frame/reg-event-db
  ::use-library-image
- (fn-traced [db [_ step-id image-id]]
-   (edit-sequence db #(edit/set-step-image % step-id image-id))))
+ (fn-traced [db [_ target image-id]]
+   (apply-picture db target image-id)))
 
 (re-frame/reg-event-db
- ::remove-step-image
+ ::remove-picture
  ;; The picture stays in the library for reuse.
- (fn-traced [db [_ step-id]]
-   (edit-sequence db #(edit/clear-step-image % step-id))))
+ (fn-traced [db [_ target]]
+   (apply-picture db target nil)))
 
 (re-frame/reg-event-db
  ::set-step-image-fit
@@ -916,3 +1001,86 @@
  ::set-step-image-position
  (fn-traced [db [_ step-id x y]]
    (edit-sequence db #(edit/set-step-image-position % step-id x y))))
+
+;; ---------------------------------------------------------------------------
+;; The Pictures screen: the whole library
+
+(re-frame/reg-event-db
+ ::open-library
+ (fn-traced [db _]
+   (cond-> db
+     (parent? db) (-> (assoc-in [:ui :screen] :library)
+                      (assoc-in [:ui :selection] nil)))))
+
+(re-frame/reg-event-db
+ ::close-library
+ (fn-traced [db _]
+   (assoc-in db [:ui :screen] :home)))
+
+(re-frame/reg-event-fx
+ ::library-files-chosen
+ ;; Several at once; each is processed and added on its own.
+ (fn-traced [{:keys [db]} [_ files]]
+   (when (and (parent? db) (seq files))
+     {:db (-> db
+              (update-in [:ui :library-busy] (fnil + 0) (count files))
+              (assoc-in [:ui :library-error] nil))
+      :fx (vec (for [file files]
+                 [:images/import {:file     file
+                                  :id       (random-uuid)
+                                  :on-done  [::library-picture-imported]
+                                  :on-error [::library-import-failed]}]))})))
+
+(defn- one-less-busy [db]
+  (update-in db [:ui :library-busy] #(max 0 (dec (or % 1)))))
+
+(re-frame/reg-event-db
+ ::library-picture-imported
+ (fn-traced [db [_ image]]
+   (-> db
+       (edit-content #(assoc-in % [:images (:id image)] image))
+       one-less-busy)))
+
+(re-frame/reg-event-db
+ ::library-import-failed
+ (fn-traced [db [_ message]]
+   (-> db one-less-busy (assoc-in [:ui :library-error] message))))
+
+(re-frame/reg-event-db
+ ::rename-image
+ (fn-traced [db [_ image-id name]]
+   (edit-content db #(edit/rename-image % image-id name))))
+
+(re-frame/reg-event-fx
+ ::replace-image
+ ;; Every step and card using `from` uses `to` instead; undoable.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ from to]]
+   (when (parent? db)
+     (offer-undo {:db (update db :content edit/replace-image from to)}
+                 now "Picture replaced" [::restore-snapshot (select-keys db [:content])]))))
+
+(re-frame/reg-event-fx
+ ::delete-image
+ ;; Off the library and everything that used it (they show text only).
+ ;; Undoable; the file itself is deleted once the undo has expired, and
+ ;; only if the picture wasn't restored.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ image-id]]
+   (when (parent? db)
+     (let [[content undo] (edit/remove-image (:content db) image-id)]
+       (when undo
+         (-> (offer-undo {:db (assoc db :content content)}
+                         now "Picture deleted" [::restore-image undo])
+             (update :fx conj [:dispatch-later {:ms (+ undo-ms 2000) :dispatch [::purge-image image-id]}])))))))
+
+(re-frame/reg-event-db
+ ::restore-image
+ (fn-traced [db [_ undo]]
+   (edit-content db #(edit/restore-image % undo))))
+
+(re-frame/reg-event-fx
+ ::purge-image
+ (fn-traced [{:keys [db]} [_ image-id]]
+   (when-not (get-in db [:content :images image-id])
+     {:fx [[:images/delete image-id]]})))

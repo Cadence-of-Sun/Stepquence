@@ -4,7 +4,8 @@
   are); images will be embedded here once they exist.
 
   Excluded: today's progress (per-day) and the theme (a device display
-  preference). Included: the PIN, so a restored device keeps its lock."
+  preference). Included: the PIN, so a restored device keeps its lock, and
+  the picture files (:image-data, see stepquence.images/export-data)."
   (:require
    [cljs.reader :as reader]
    [malli.core :as m]
@@ -15,15 +16,25 @@
 
 (def format-version 1)
 
-(defn backup-data [db now]
-  {:stepquence/backup format-version
-   :schema-version  schema/schema-version
-   :exported-at     now
-   :content         (:content db)
-   :settings        (dissoc (:settings db) :theme)})
+(defn backup-data
+  ([db now] (backup-data db now {}))
+  ([db now image-data]
+   {:stepquence/backup format-version
+    :schema-version    schema/schema-version
+    :exported-at       now
+    :content           (:content db)
+    :settings          (dissoc (:settings db) :theme)
+    :image-data        image-data}))
 
-(defn encode [db now]
-  (pr-str (backup-data db now)))
+(defn encode
+  ([db now] (encode db now {}))
+  ([db now image-data]
+   (pr-str (backup-data db now image-data))))
+
+(defn image-ids
+  "Every picture a backup should carry."
+  [db]
+  (keys (get-in db [:content :images])))
 
 (defn filename [now]
   (str "stepquence-backup-" (day/today now 0) ".edn"))
@@ -37,6 +48,7 @@
 
 (def ^:private content-explainer (m/explainer schema/Content))
 (def ^:private settings-explainer (m/explainer schema/Settings))
+(def ^:private image-data-explainer (m/explainer [:maybe schema/ImageData]))
 
 (defn migrate
   "Bring an older backup up to the current schema. Nothing to migrate yet."
@@ -58,7 +70,8 @@
       :else
       (let [data     (migrate data)
             problems (or (some-> (content-explainer (:content data)) me/humanize)
-                         (some-> (settings-explainer (assoc (:settings data) :theme nil)) me/humanize))]
+                         (some-> (settings-explainer (assoc (:settings data) :theme nil)) me/humanize)
+                         (some-> (image-data-explainer (:image-data data)) me/humanize))]
         (if problems
           (do (js/console.error "Backup failed validation" (pr-str problems))
               {:error "That backup is damaged or incomplete, so nothing was changed."})

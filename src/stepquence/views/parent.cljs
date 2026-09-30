@@ -162,12 +162,17 @@
   "Confirm a full restore or a merge of shared sequences, or explain why
   the file can't be used."
   []
-  (when-let [{:keys [kind error summary] :as entry} @(re-frame/subscribe [::subs/import])]
+  (when-let [{:keys [kind error summary busy?] :as entry} @(re-frame/subscribe [::subs/import])]
     (let [current (count (:sequences @(re-frame/subscribe [::subs/content])))
           cancel  #(re-frame/dispatch [::events/import-cancel])]
       [:div.dialog-overlay
        [:div.dialog {:role "alertdialog" :aria-modal true :aria-labelledby "import-title"}
         (cond
+          busy?
+          [:<>
+           [:h2#import-title.dialog-title "Importing…"]
+           [:p "Storing the pictures."]]
+
           error
           [:<>
            [:h2#import-title.dialog-title "Can't use that file"]
@@ -194,6 +199,31 @@
                {:type     "button"
                 :on-click #(re-frame/dispatch [::events/import-confirm])}
                "Replace everything"]]]))]])))
+
+(defn export-status
+  "While an export is being prepared (pictures are read from storage), a
+  small note; if the tap that started it no longer counts for sharing, a
+  prompt for one more."
+  []
+  (when-let [{:keys [status]} @(re-frame/subscribe [::subs/export])]
+    (case status
+      :preparing [:div.undo-toast {:role "status"} [:span "Preparing the file…"]]
+      :ready     [:div.dialog-overlay
+                  [:div.dialog {:role "alertdialog" :aria-modal true :aria-labelledby "export-title"}
+                   [:h2#export-title.dialog-title "Your file is ready"]
+                   [:div.dialog-actions
+                    [:button.dialog-button {:type "button" :on-click #(re-frame/dispatch [::events/export-cancel])} "Cancel"]
+                    [:button.dialog-button.is-primary
+                     {:type "button"
+                      ;; Synchronous: sharing needs this click.
+                      :on-click #(re-frame/dispatch-sync [::events/share-prepared])}
+                     "Share"]]]]
+      :error     [:div.dialog-overlay
+                  [:div.dialog {:role "alertdialog" :aria-modal true :aria-labelledby "export-title"}
+                   [:h2#export-title.dialog-title "Couldn't prepare the file"]
+                   [:p "Something went wrong reading the pictures. Nothing was changed; please try again."]
+                   [:div.dialog-actions
+                    [:button.dialog-button.is-primary {:type "button" :on-click #(re-frame/dispatch [::events/export-done])} "OK"]]]])))
 
 (defn- import-button
   "A button that opens the file picker (the input itself stays hidden).
@@ -266,6 +296,15 @@
               [:div.settings-field
                [:span "Theme"]
                [theme-toggle]]
+              [:div.settings-section
+               [:span.settings-label "Pictures"]
+               [:button.settings-button
+                {:type     "button"
+                 :on-click (fn []
+                             (reset! open? false)
+                             (re-frame/dispatch [::events/open-library]))}
+                (let [n (count @(re-frame/subscribe [::subs/image-library]))]
+                  (str "Manage pictures" (when (pos? n) (str " (" n ")"))))]]
               [:div.settings-section
                [:span.settings-label "Backup"]
                [:p.backup-status {:class (when stale? "is-stale")} text]

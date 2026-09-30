@@ -110,41 +110,6 @@
        (swap! activity assoc :timer (js/setTimeout check timeout-ms))))))
 
 ;; ---------------------------------------------------------------------------
-;; File export (backups, shared sequences): the system share sheet where
-;; files can be shared (iOS and macOS Safari, Android Chrome, Chromium on
-;; Windows/ChromeOS), a download otherwise. Must run inside the click
-;; (dispatch-sync), because sharing needs a user gesture.
-
-(defn- download! [text filename]
-  (let [url (js/URL.createObjectURL (js/Blob. #js [text] #js {:type "application/edn"}))
-        a   (.createElement js/document "a")]
-    (set! (.-href a) url)
-    (set! (.-download a) filename)
-    (.appendChild (.-body js/document) a)
-    (.click a)
-    (.remove a)
-    (js/setTimeout #(js/URL.revokeObjectURL url) 10000)))
-
-(re-frame/reg-fx
- :file/export
- ;; Dispatches `on-done` (if given) once the file has been shared or
- ;; downloaded (not if the parent cancels the share sheet).
- (fn [{:keys [text filename title on-done]}]
-   (let [file   (js/File. #js [text] filename #js {:type "text/plain"})
-         files  #js {:files #js [file]}
-         share? (and (.-canShare js/navigator) (.canShare js/navigator files))]
-     (if share?
-       (-> (.share js/navigator #js {:files #js [file] :title title})
-           (.then #(some-> on-done re-frame/dispatch))
-           (.catch (fn [e]
-                     ;; AbortError: the parent closed the share sheet.
-                     (when-not (= "AbortError" (.-name e))
-                       (download! text filename)
-                       (some-> on-done re-frame/dispatch)))))
-       (do (download! text filename)
-           (some-> on-done re-frame/dispatch))))))
-
-;; ---------------------------------------------------------------------------
 ;; Theme
 
 (def ^:private theme-storage-key "stepquence.theme")

@@ -384,3 +384,80 @@
                step (:steps s)
                :when (= image-id (:image-id step))]
            step)))
+
+(defn image-usage
+  "{:steps n :sequences m}: steps showing picture `image-id`, and sequences
+  using it as their card picture."
+  [content image-id]
+  {:steps     (image-uses content image-id)
+   :sequences (count (filter #(= image-id (:image-id %)) (vals (:sequences content))))})
+
+(defn set-sequence-image [sequence image-id]
+  (assoc sequence :image-id image-id))
+
+(defn clear-sequence-image [sequence]
+  (dissoc sequence :image-id))
+
+(defn rename-image [content image-id name]
+  (let [name (clip (str/trim name) schema/max-name)]
+    (if (and (get-in content [:images image-id]) (not (str/blank? name)))
+      (assoc-in content [:images image-id :name] name)
+      content)))
+
+(defn- map-sequences [content f]
+  (update content :sequences #(into {} (map (fn [[id s]] [id (f s)])) %)))
+
+(defn replace-image
+  "Point every use of picture `from` (steps and sequence cards) at `to`. A
+  step keeps its fit; a fill focus point is dropped (it was for the old
+  picture)."
+  [content from to]
+  (if (and (not= from to) (get-in content [:images to]))
+    (map-sequences content
+                   (fn [s]
+                     (cond-> (update s :steps
+                                     (fn [steps]
+                                       (mapv #(if (= from (:image-id %))
+                                                (-> % (assoc :image-id to) (dissoc :image-position))
+                                                %)
+                                             steps)))
+                       (= from (:image-id s)) (assoc :image-id to))))
+    content))
+
+(defn remove-image
+  "Remove picture `image-id` from the library; the steps and cards that
+  used it lose it (and fall back to text). Returns [content' undo]."
+  [content image-id]
+  (if-let [image (get-in content [:images image-id])]
+    (let [step-refs (vec (for [s (vals (:sequences content))
+                               step (:steps s)
+                               :when (= image-id (:image-id step))]
+                           [(:id s) (:id step) (select-keys step [:image-fit :image-position])]))
+          seq-refs  (vec (keep #(when (= image-id (:image-id %)) (:id %)) (vals (:sequences content))))]
+      [(-> content
+           (update :images dissoc image-id)
+           (map-sequences (fn [s]
+                            (cond-> (update s :steps
+                                            (fn [steps]
+                                              (mapv #(if (= image-id (:image-id %))
+                                                       (dissoc % :image-id :image-fit :image-position)
+                                                       %)
+                                                    steps)))
+                              (= image-id (:image-id s)) (dissoc :image-id)))))
+       {:image image :step-refs step-refs :seq-refs seq-refs}])
+    [content nil]))
+
+(defn restore-image
+  "Undo remove-image: the picture returns, and so do its uses (where the
+  step or sequence still exists)."
+  [content {:keys [image step-refs seq-refs]}]
+  (let [id      (:id image)
+        content (assoc-in content [:images id] image)
+        content (reduce (fn [c [sid step-id framing]]
+                          (if (get-in c [:sequences sid])
+                            (update-in c [:sequences sid] update-step step-id
+                                       #(merge (assoc % :image-id id) framing))
+                            c))
+                        content step-refs)]
+    (reduce (fn [c sid] (cond-> c (get-in c [:sequences sid]) (assoc-in [:sequences sid :image-id] id)))
+            content seq-refs)))

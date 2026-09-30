@@ -143,3 +143,24 @@
     (testing "a new picture starts fit, dropping an old focus point"
       (let [focused (edit/set-step-image-position with :s1 10 10)]
         (is (not (contains? (get-in (edit/set-step-image focused :s1 :img2) [:steps 1]) :image-position)))))))
+
+(deftest the-picture-library
+  (let [lib     {:img1 {:id :img1 :name "Toothbrush" :source :local :width 4 :height 3}
+                 :img2 {:id :img2 :name "Cup" :source :local :width 4 :height 3}}
+        content (-> content
+                    (assoc :images lib)
+                    (update-in [:sequences :a :steps 0] assoc :image-id :img1 :image-fit :cover :image-position "10% 20%")
+                    (assoc-in [:sequences :c :image-id] :img1))]
+    (is (= {:steps 1 :sequences 1} (edit/image-usage content :img1)))
+    (is (= "Brush" (-> (edit/rename-image content :img1 " Brush ") :images :img1 :name)))
+    (testing "replace repoints steps and cards, keeps fit, drops the old focus point"
+      (let [after (edit/replace-image content :img1 :img2)]
+        (is (= {:steps 0 :sequences 0} (edit/image-usage after :img1)))
+        (is (= {:image-id :img2 :image-fit :cover} (select-keys (get-in after [:sequences :a :steps 0]) [:image-id :image-fit :image-position])))
+        (is (= :img2 (get-in after [:sequences :c :image-id])))))
+    (testing "remove takes it off everything; undo puts it all back"
+      (let [[after undo] (edit/remove-image content :img1)]
+        (is (not (contains? (:images after) :img1)))
+        (is (not-any? :image-id (get-in after [:sequences :a :steps])))
+        (is (nil? (get-in after [:sequences :c :image-id])))
+        (is (= content (edit/restore-image after undo)))))))

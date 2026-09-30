@@ -45,3 +45,12 @@
     (is (= now (-> restored :meta :last-backup-at)))
     (is (empty? (-> restored :day :done)) "today's progress starts fresh")
     (is (nil? (schema/explain-app-db restored)))))
+
+(deftest carries-pictures
+  (let [img  (random-uuid)
+        data {img {:full "data:image/webp;base64,AAAA" :thumb "data:image/webp;base64,BBBB"}}
+        out  (backup/decode (backup/encode device now data))]
+    (is (= data (-> out :data :image-data))))
+  (testing "damaged picture data is refused"
+    (is (re-find #"damaged"
+                 (:error (backup/decode (backup/encode device now {(random-uuid) {:full "hello" :thumb "x"}})))))))

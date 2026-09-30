@@ -76,3 +76,21 @@
 (deftest rejects-other-files
   (is (re-find #"isn't a Stepquence file" (:error (share/decode "hello"))))
   (is (re-find #"damaged" (:error (share/decode (pr-str {:stepquence/sequences 1 :sequences {1 2}}))))))
+
+(deftest carries-only-the-pictures-in-use
+  (let [img-a   (random-uuid)
+        img-b   (random-uuid)
+        content (-> content
+                    (assoc :images {img-a {:id img-a :name "a" :source :local :width 4 :height 3}
+                                    img-b {:id img-b :name "b" :source :local :width 4 :height 3}})
+                    (assoc-in [:sequences teeth :steps 0 :image-id] img-a)
+                    (assoc-in [:sequences snack :image-id] img-b))]
+    (testing "a linked sequence's step pictures come along"
+      (is (= #{img-a} (share/used-images content [bedtime]))))
+    (testing "a sequence's own card picture"
+      (is (= #{img-b} (share/used-images content [snack]))))
+    (let [data (:data (share/decode (share/encode content [bedtime] now {img-a {:full "data:image/webp;base64,AA" :thumb "data:image/webp;base64,BB"}})))]
+      (is (= #{img-a} (set (keys (:images data)))))
+      (testing "merging adds the picture records"
+        (let [empty {:sequences {} :groups [] :items {} :collections {} :images {}}]
+          (is (contains? (:images (:content (share/merge-into empty data {} (counter)))) img-a)))))))

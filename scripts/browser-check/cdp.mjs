@@ -1,7 +1,7 @@
 // Drive headless Chromium over CDP. Usage: S=<dir> STEPS='[[kind,arg],...]' node cdp.mjs <w> <h> <prefix>
 // kinds: click (button text or selector), clickfast, shot, eval, reload,
 //        type [selector, text], key <name>, drag [selector, dy],
-//        save [expr, path], file [inputSelector, path], cdp [method, params]
+//        save [expr, path], file [inputSelector, path-or-paths], cdp [method, params]
 // URL (env) overrides the default http://127.0.0.1:8391/.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -31,7 +31,7 @@ for (const [kind, arg] of JSON.parse(process.env.STEPS)) {
   else if (kind === 'key') { const [code, text] = keys[arg]; await send('Input.dispatchKeyEvent', { type: 'keyDown', key: arg, code: arg, windowsVirtualKeyCode: code, text }); await send('Input.dispatchKeyEvent', { type: 'keyUp', key: arg, code: arg, windowsVirtualKeyCode: code }); await sleep(300); }
   else if (kind === 'drag') { const [sel, dy] = arg; const [x, y] = await evalJs(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`); await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }); for (let i = 1; i <= 12; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: y + dy * i / 12, button: 'left', buttons: 1 }); await sleep(30); } await sleep(200); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: y + dy, button: 'left', buttons: 0, clickCount: 1 }); await sleep(400); }
   else if (kind === 'save') { const [expr, path] = arg; writeFileSync(path, String(await evalJs(expr))); console.log('saved', path); }
-  else if (kind === 'file') { const [sel, path] = arg; const doc = await send('DOM.getDocument', { depth: -1 }); const q = await send('DOM.querySelector', { nodeId: doc.result.root.nodeId, selector: sel }); await send('DOM.setFileInputFiles', { files: [path], nodeId: q.result.nodeId }); await sleep(900); }
+  else if (kind === 'file') { const [sel, path] = arg; const doc = await send('DOM.getDocument', { depth: -1 }); const q = await send('DOM.querySelector', { nodeId: doc.result.root.nodeId, selector: sel }); await send('DOM.setFileInputFiles', { files: Array.isArray(path) ? path : [path], nodeId: q.result.nodeId }); await sleep(900); }
   else if (kind === 'cdp') { const [method, params] = arg; console.log(method, '=>', JSON.stringify((await send(method, params || {})).result).slice(0, 400)); }
   else if (kind === 'eval') console.log(arg.length > 80 ? arg.slice(0, 77) + '...' : arg, '=>', JSON.stringify(await evalJs(arg)));
 }

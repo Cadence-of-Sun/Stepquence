@@ -50,9 +50,20 @@
         (mapcat #(get-in content [:collections % :item-ids]))
         (used-collections sequences)))
 
+(defn used-images
+  "Pictures used by sequences `ids` and what they link to: their steps' and
+  their own card pictures."
+  [content ids]
+  (let [sequences (vals (select-keys (:sequences content) (closure content ids)))]
+    (into #{} (remove nil?)
+          (concat (map :image-id sequences)
+                  (map :image-id (mapcat :steps sequences))))))
+
 (defn export-data
-  "The shared file for sequences `ids` (and what they link to)."
-  [content ids now]
+  "The shared file for sequences `ids` (and what they link to), with the
+  pictures they use (`image-data`, from stepquence.images/export-data)."
+  ([content ids now] (export-data content ids now {}))
+  ([content ids now image-data]
   (let [all       (closure content ids)
         sequences (select-keys (:sequences content) all)]
     {:stepquence/sequences format-version
@@ -67,10 +78,13 @@
                                  (:groups content))
      :items                (select-keys (:items content) (used-items content (vals sequences)))
      :collections          (select-keys (:collections content) (used-collections (vals sequences)))
-     :images               {}}))
+     :images               (select-keys (:images content) (used-images content ids))
+     :image-data           image-data})))
 
-(defn encode [content ids now]
-  (pr-str (export-data content ids now)))
+(defn encode
+  ([content ids now] (encode content ids now {}))
+  ([content ids now image-data]
+   (pr-str (export-data content ids now image-data))))
 
 (defn- slug [s]
   (let [s (-> s .toLowerCase (.replace (js/RegExp. "[^a-z0-9]+" "g") "-") (.replace (js/RegExp. "^-|-$" "g") ""))]
@@ -88,6 +102,8 @@
 
 (def ^:private Shared
   [:map
+   [:images {:optional true} [:map-of :uuid schema/Image]]
+   [:image-data {:optional true} [:maybe schema/ImageData]]
    [:sequences [:map-of :uuid schema/Sequence]]
    [:groups [:vector schema/Group]]
    [:items [:map-of :uuid schema/Item]]
@@ -169,7 +185,9 @@
         id-map   (into {} (keep (fn [row] (when (= :copy (choice row)) [(:id row) (new-id)]))) rows)
         content  (-> content
                      (update :items #(merge (:items data) %))
-                     (update :collections #(merge (:collections data) %)))]
+                     (update :collections #(merge (:collections data) %))
+                     ;; Picture records: the same id is the same picture.
+                     (update :images #(merge (:images data) %)))]
     (reduce
      (fn [{:keys [content] :as acc} {:keys [id] :as row}]
        (let [incoming (remap-links (get-in data [:sequences id]) id-map)]

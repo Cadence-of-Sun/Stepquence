@@ -141,3 +141,61 @@
        (when (string? u) (js/URL.revokeObjectURL u)))
      (swap! urls dissoc [id kind]))
    (idb/delMany #js [(blob-key id :full) (blob-key id :thumb)] @store)))
+
+;; ---------------------------------------------------------------------------
+;; Transfer: pictures embedded in backup and shared files as data URLs
+;; (base64 exists only for transfer and backup; storage keeps blobs).
+
+(defn- blob->data-url [blob]
+  (js/Promise.
+   (fn [resolve reject]
+     (let [reader (js/FileReader.)]
+       (set! (.-onload reader) #(resolve (.-result reader)))
+       (set! (.-onerror reader) #(reject (.-error reader)))
+       (.readAsDataURL reader blob)))))
+
+(defn export-data
+  "Resolves to {id {:full data-url :thumb data-url}} for the pictures in
+  `ids` whose files exist (missing ones are skipped)."
+  [ids]
+  (-> (js/Promise.all
+       (clj->js
+        (for [id ids]
+          (-> (idb/getMany #js [(blob-key id :full) (blob-key id :thumb)] @store)
+              (.then (fn [[full thumb]]
+                       (if (and full thumb)
+                         (-> (js/Promise.all #js [(blob->data-url full) (blob->data-url thumb)])
+                             (.then (fn [[f t]] [id {:full f :thumb t}])))
+                         nil)))))))
+      (.then #(into {} (remove nil?) %))))
+
+(defn import-data!
+  "Store pictures from a file's {id {:full data-url :thumb data-url}}.
+  Resolves when all are written."
+  [image-data]
+  (-> (js/Promise.all
+       (clj->js
+        (for [[id {:keys [full thumb]}] image-data]
+          (-> (js/Promise.all #js [(-> (js/fetch full) (.then #(.blob %)))
+                                   (-> (js/fetch thumb) (.then #(.blob %)))])
+              (.then (fn [[f t]]
+                       ;; Replace any cached URL: the file may differ.
+                       (doseq [kind [:full :thumb]]
+                         (let [u (get @urls [id kind])]
+                           (when (string? u) (js/URL.revokeObjectURL u)))
+                         (swap! urls dissoc [id kind]))
+                       (idb/setMany #js [#js [(blob-key id :full) f]
+                                         #js [(blob-key id :thumb) t]]
+                                    @store)))))))
+      (.then (fn [_] true))))
+
+(re-frame/reg-fx
+ :images/import-data
+ ;; Write a file's embedded pictures, then dispatch `on-done` (or
+ ;; `on-error` with a message).
+ (fn [{:keys [image-data on-done on-error]}]
+   (-> (import-data! (or image-data {}))
+       (.then #(re-frame/dispatch on-done))
+       (.catch (fn [e]
+                 (js/console.error "Storing imported pictures failed" e)
+                 (re-frame/dispatch (conj on-error "The pictures in that file couldn't be stored, so nothing was changed.")))))))

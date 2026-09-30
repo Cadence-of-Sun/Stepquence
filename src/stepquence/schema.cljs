@@ -131,6 +131,13 @@
    [:name (Text max-name)]
    [:sequence-ids [:vector :uuid]]])
 
+(def ImageData
+  "Pictures embedded in backup and shared files: data URLs per picture id.
+  (Base64 exists only for transfer and backup; storage keeps blobs.)"
+  [:map-of :uuid [:map
+                  [:full [:re #"^data:image/"]]
+                  [:thumb [:re #"^data:image/"]]]])
+
 (def Content
   [:map
    [:sequences [:map-of :uuid Sequence]]
@@ -207,7 +214,7 @@
 
 (def Ui
   [:map
-   [:screen [:enum :loading :home :walkthrough]]
+   [:screen [:enum :loading :home :walkthrough :library]]
    [:parent? :boolean]
    [:overview? :boolean]
    ;; Storage has loaded and saving is on (false before load, or when
@@ -233,8 +240,14 @@
    ;; shared sequences {:kind :sequences :data :rows :choices} awaiting
    ;; confirmation, or {:error …}.
    [:import {:optional true} [:maybe :map]]
-   ;; The picture dialog: {:step-id … :busy? … :error …} while open.
+   ;; The picture dialog: {:target {:step-id …}|{:sequence-id …} :busy? …
+   ;; :error …} while open.
    [:picture-editor {:optional true} [:maybe :map]]
+   ;; Pictures screen: files still being added, and the last failure.
+   [:library-busy {:optional true} [:maybe nat-int?]]
+   [:library-error {:optional true} [:maybe :string]]
+   ;; An export in progress: {:status :preparing|:ready|:error}.
+   [:export {:optional true} [:maybe [:map [:status [:enum :preparing :ready :error]]]]]
    ;; Sequences chosen for sharing, while selecting on the list.
    [:selection {:optional true} [:maybe [:set :uuid]]]
    ;; PIN pad state while it is open.

@@ -309,9 +309,10 @@
  ;; For the editor's "Sequence" section.
  :<- [::content]
  :<- [::run-sequence]
- (fn [[content {:keys [id days]}]]
+ (fn [[content {:keys [id days image-id]}]]
    (when id
      {:id       id
+      :image-id image-id
       :days     days
       :group-id (some #(when (some #{id} (:sequence-ids %)) (:id %)) (:groups content))
       :groups   (mapv #(select-keys % [:id :name]) (:groups content))
@@ -367,12 +368,17 @@
 
 (re-frame/reg-sub
  ::picture-editor
- ;; The open picture dialog, with its step (from the previewed sequence).
+ ;; The open picture dialog, with what it edits: a step of the previewed
+ ;; sequence, or a sequence (card picture).
  :<- [::picture-editor-state]
  :<- [::run-sequence]
- (fn [[state sequence]]
+ :<- [::content]
+ (fn [[{:keys [target] :as state} run-seq content]]
    (when state
-     (assoc state :step (some #(when (= (:step-id state) (:id %)) %) (:steps sequence))))))
+     (assoc state :subject
+            (if-let [step-id (:step-id target)]
+              (some #(when (= step-id (:id %)) %) (:steps run-seq))
+              (get-in content [:sequences (:sequence-id target)]))))))
 
 (re-frame/reg-sub
  ::image-library
@@ -381,7 +387,15 @@
  (fn [content]
    (->> (vals (:images content))
         (sort-by (comp str/lower-case :name))
-        (mapv #(assoc % :uses (edit/image-uses content (:id %)))))))
+        (mapv #(merge % {:uses (edit/image-uses content (:id %))}
+                      (let [{:keys [steps sequences]} (edit/image-usage content (:id %))]
+                        {:usage-steps steps :usage-sequences sequences}))))))
+
+(re-frame/reg-sub
+ ::library-status
+ (fn [db]
+   {:busy  (get-in db [:ui :library-busy] 0)
+    :error (get-in db [:ui :library-error])}))
 
 (re-frame/reg-sub
  ::selection-blockers
@@ -407,6 +421,11 @@
         (keep #(get-in content [:sequences % :title]))
         sort
         vec)))
+
+(re-frame/reg-sub
+ ::export
+ (fn [db]
+   (get-in db [:ui :export])))
 
 (re-frame/reg-sub
  ::app-version

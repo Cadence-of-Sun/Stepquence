@@ -9,6 +9,7 @@
    [stepquence.views.fields :as fields]
    [stepquence.views.icons :as icons]
    [stepquence.views.parent :as parent]
+   [stepquence.views.picture :as picture]
    [stepquence.views.progress :as progress]))
 
 (defn- sequence-card
@@ -18,7 +19,7 @@
   schedule is shown, and sequences not scheduled today are dimmed. While
   selecting (for sharing), a tap selects instead of opening."
   ([sequence parent?] (sequence-card sequence parent? nil))
-  ([{:keys [id title steps done-today? done-count today? days-label]} parent? selection]
+  ([{:keys [id title steps done-today? done-count today? days-label image-id]} parent? selection]
    (let [selecting? (some? selection)
          selected?  (contains? selection id)]
      [:button.sequence-card
@@ -31,6 +32,9 @@
        :on-click     #(re-frame/dispatch (if selecting?
                                            [::events/toggle-selected id]
                                            [::events/start-sequence id]))}
+      ;; The card picture, when it has one (nothing otherwise).
+      (when image-id
+        [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "card-thumb"}])
    [:span.sequence-card-text
     [:span.sequence-card-title title]
     [progress/mini-dots steps done-count]

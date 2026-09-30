@@ -171,11 +171,11 @@
     [:button.picture-slot
      {:type       "button"
       :aria-label (str "Picture for \"" title "\"")
-      :on-click   #(re-frame/dispatch [::events/open-picture-editor id])}
+      :on-click   #(re-frame/dispatch [::events/open-picture-editor {:step-id id}])}
      [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "picture-slot-thumb"}]]
     [:button.add-description
      {:type     "button"
-      :on-click #(re-frame/dispatch [::events/open-picture-editor id])}
+      :on-click #(re-frame/dispatch [::events/open-picture-editor {:step-id id}])}
      "+ Picture"]))
 
 (defn- step-row [{:keys [id kind title description target current? done? collection-name] :as row}
@@ -300,10 +300,24 @@
   [["Every day" edit/every-day] ["Weekdays" edit/weekdays] ["Weekends" edit/weekends]])
 
 (defn sequence-settings []
-  (when-let [{:keys [id days group-id groups links-to]} @(re-frame/subscribe [::subs/sequence-settings])]
+  (when-let [{:keys [id days group-id groups links-to image-id]} @(re-frame/subscribe [::subs/sequence-settings])]
     (let [set-days! #(re-frame/dispatch [::events/set-sequence-days id %])]
       [:section.sequence-settings
        [:h2.settings-heading "Sequence settings"]
+
+       [:div.setting
+        [:span.setting-label "Card picture"]
+        (if image-id
+          [:button.picture-slot
+           {:type       "button"
+            :aria-label "Change the card picture"
+            :on-click   #(re-frame/dispatch [::events/open-picture-editor {:sequence-id id}])}
+           [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "picture-slot-thumb"}]]
+          [:button.settings-button
+           {:type     "button"
+            :on-click #(re-frame/dispatch [::events/open-picture-editor {:sequence-id id}])}
+           "+ Picture"])
+        [:p.setting-note "Shown on the sequence's card in the list."]]
 
        [:div.setting
         [:label.setting-label {:for "sequence-group"} "Group"]
@@ -363,11 +377,11 @@
                   " first to delete it."))])]])))
 
 ;; ---------------------------------------------------------------------------
-;; Picture dialog: one step's picture
+;; Picture dialog: a step's picture, or a sequence's card picture
 
 (defn- photo-button
   "Opens the file picker; on phones it offers the camera and the gallery."
-  [step-id label]
+  [target label]
   (r/with-let [input (atom nil)]
     [:<>
      [:input.visually-hidden
@@ -379,7 +393,7 @@
        :on-change   (fn [e]
                       (let [el (.-target e)]
                         (when-let [file (aget (.-files el) 0)]
-                          (re-frame/dispatch [::events/picture-file-chosen step-id file]))
+                          (re-frame/dispatch [::events/picture-file-chosen target file]))
                         (set! (.-value el) "")))}]
      [:button.dialog-button.is-primary
       {:type "button" :on-click #(some-> @input .click)}
@@ -387,9 +401,9 @@
 
 (defn- preview
   "The picture as the step will show it. When filled, tapping sets the part
-  kept in the middle."
-  [{:keys [id title image-id image-fit image-position]}]
-  (let [cover? (= :cover image-fit)]
+  kept in the middle. (Card pictures always fill their small frame.)"
+  [{:keys [id title image-id image-fit image-position]} step?]
+  (let [cover? (and step? (= :cover image-fit))]
     [:div.picture-preview
      {:class    (when cover? "is-focusable")
       :on-click (when cover?
@@ -398,13 +412,13 @@
                       (re-frame/dispatch [::events/set-step-image-position id
                                           (* 100 (/ (- (.-clientX e) (.-left r)) (.-width r)))
                                           (* 100 (/ (- (.-clientY e) (.-top r)) (.-height r)))]))))}
-     [picture/picture {:image-id image-id :kind :full :fit image-fit :position image-position
-                       :alt title :class "step-picture"}]
+     [picture/picture {:image-id image-id :kind :full :fit (if step? image-fit :cover)
+                       :position image-position :alt title :class "step-picture"}]
      (when cover?
        (let [[x y] (str/split (or image-position "50% 50%") #" ")]
          [:span.focus-mark {:style {:left x :top y}}]))]))
 
-(defn- library-grid [step-id current-id close!]
+(defn- library-grid [target current-id close!]
   (let [images (remove #(= current-id (:id %)) @(re-frame/subscribe [::subs/image-library]))]
     [:div.picture-library
      (if (seq images)
@@ -416,24 +430,27 @@
             {:type     "button"
              :on-click (fn []
                          (close!)
-                         (re-frame/dispatch [::events/use-library-image step-id id]))}
+                         (re-frame/dispatch [::events/use-library-image target id]))}
             [picture/picture {:image-id id :kind :thumb :fit :cover :alt "" :class "picture-choice-thumb"}]
             [:span.picture-choice-name name]]])]
        [:p.setting-note "No other pictures yet."])]))
 
 (defn picture-dialog []
   (r/with-let [browsing? (r/atom false)]
-    (if-let [{:keys [step busy? error]} @(re-frame/subscribe [::subs/picture-editor])]
-      (let [{:keys [id title image-id image-fit]} step
-            close! #(re-frame/dispatch [::events/close-picture-editor])]
+    (when-let [{:keys [target subject busy? error]} @(re-frame/subscribe [::subs/picture-editor])]
+      (let [{:keys [id title image-id image-fit]} subject
+            step?  (contains? target :step-id)
+            close! #(do (reset! browsing? false)
+                        (re-frame/dispatch [::events/close-picture-editor]))]
         [:div.dialog-overlay
          [:div.dialog.picture-dialog {:role "dialog" :aria-modal true :aria-labelledby "picture-title"}
-          [:h2#picture-title.dialog-title (str "Picture for \"" title "\"")]
+          [:h2#picture-title.dialog-title
+           (if step? (str "Picture for \"" title "\"") (str "Card picture for \"" title "\""))]
           (cond
             busy?    [:p.setting-note "Adding the picture…"]
             error    [:p.setting-note error]
-            image-id [preview step])
-          (when image-id
+            image-id [preview subject step?])
+          (when (and image-id step?)
             [:<>
              [:div.chips {:role "group" :aria-label "Framing"}
               [:button.chip {:type "button" :aria-pressed (not= :cover image-fit)
@@ -446,15 +463,15 @@
                                 "Fill crops the edges. Tap the picture to choose the part to keep in the middle."
                                 "Fit shows the whole picture.")]])
           [:div.picture-actions
-           [photo-button id (if image-id "New photo" "Take or choose a photo")]
+           [photo-button target (if image-id "New photo" "Take or choose a photo")]
            [:button.dialog-button
             {:type "button" :aria-expanded @browsing? :on-click #(swap! browsing? not)}
             "From the library"]
            (when image-id
              [:button.dialog-button
-              {:type "button" :on-click #(re-frame/dispatch [::events/remove-step-image id])}
+              {:type "button" :on-click #(re-frame/dispatch [::events/remove-picture target])}
               "Remove picture"])]
           (when @browsing?
-            [library-grid id image-id #(reset! browsing? false)])
+            [library-grid target image-id #(reset! browsing? false)])
           [:div.dialog-actions
-           [:button.dialog-button {:type "button" :on-click #(do (reset! browsing? false) (close!))} "Done"]]]]))))
+           [:button.dialog-button {:type "button" :on-click close!} "Done"]]]]))))
