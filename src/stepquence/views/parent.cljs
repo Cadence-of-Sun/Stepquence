@@ -91,9 +91,11 @@
 ;; ---------------------------------------------------------------------------
 ;; Banner
 
-(defn- theme-toggle []
-  ;; Shows which theme is active (the system's until pressed); pressing
-  ;; switches to the other and remembers it.
+(defn theme-toggle
+  "Shows which theme is active (the system's until pressed); pressing
+  switches to the other and remembers it. On the sequence list for
+  everyone, so the child can choose what's comfortable."
+  []
   (let [showing @(re-frame/subscribe [::subs/theme-showing])
         other   (if (= :dark showing) "light" "dark")]
     [:button.theme-toggle.toggle
@@ -293,18 +295,6 @@
             [icons/gear]]
            (when @open?
              [:div#settings-body.settings-body {:role "group" :aria-label "Settings"}
-              [:div.settings-field
-               [:span "Theme"]
-               [theme-toggle]]
-              [:div.settings-section
-               [:span.settings-label "Pictures"]
-               [:button.settings-button
-                {:type     "button"
-                 :on-click (fn []
-                             (reset! open? false)
-                             (re-frame/dispatch [::events/open-library]))}
-                (let [n (count @(re-frame/subscribe [::subs/image-library]))]
-                  (str "Manage pictures" (when (pos? n) (str " (" n ")"))))]]
               [:div.settings-section
                [:span.settings-label "Backup"]
                [:p.backup-status {:class (when stale? "is-stale")} text]
@@ -335,6 +325,16 @@
   (when @(re-frame/subscribe [::subs/parent?])
     [:div.parent-banner
      [:span.parent-banner-label "Parent mode"]
+     ;; Dedicated editing screens get their own buttons; Settings keeps
+     ;; backup, install and the version.
+     (let [on-library? (= :library @(re-frame/subscribe [::subs/screen]))]
+       [:button.banner-button
+        {:type         "button"
+         :title        "Pictures"
+         :aria-label   "Pictures"
+         :aria-pressed on-library?
+         :on-click     #(re-frame/dispatch [(if on-library? ::events/close-library ::events/open-library)])}
+        [icons/image]])
      [settings-panel]
      [:button.parent-lock
       {:type     "button"

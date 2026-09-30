@@ -469,6 +469,40 @@ button {
   position: static;
 }
 
+.select-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: calc(var(--space-1) * -1) 0 var(--space-3);
+}
+
+/* Icon buttons in the parent banner (Pictures, …), beside Settings. */
+.banner-button {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+}
+
+.banner-button[aria-pressed="true"],
+.banner-button:hover {
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+}
+
+.banner-button .icon {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.settings-body > .settings-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
 .settings-toggle {
   display: grid;
   place-items: center;

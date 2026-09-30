@@ -184,11 +184,15 @@
      [:header.home-header
       ;; Holding the heading for 2s opens parent mode.
       [parent/long-press-heading :h1.home-title "Sequences"]
-      (when parent?
+      [parent/theme-toggle]]
+     ;; Parent mode's Select on its own row, so the child's header (heading
+     ;; and theme toggle) looks the same in both modes.
+     (when parent?
+       [:div.select-row
         [:button.select-toggle
          {:type     "button"
           :on-click #(re-frame/dispatch [(if selection ::events/stop-selecting ::events/start-selecting)])}
-         (if selection "Cancel" "Select")])]
+         (if selection "Cancel" "Select")]])
      (if parent?
        [parent-groups selection]
        [child-groups])

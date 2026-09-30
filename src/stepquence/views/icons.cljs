@@ -158,3 +158,12 @@
    [:circle {:cx 12 :cy 5 :r 2.6 :fill "none" :stroke "currentColor" :stroke-width 2}]
    [:circle {:cx 12 :cy 12 :r 2.6 :fill "currentColor"}]
    [:circle {:cx 12 :cy 19 :r 2.6 :fill "none" :stroke "currentColor" :stroke-width 2}]])
+
+(defn image
+  "A framed picture (a sun over hills): the Pictures screen."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor"
+              :stroke-width 2 :stroke-linecap "round" :stroke-linejoin "round"}
+   [:rect {:x 3 :y 4.5 :width 18 :height 15 :rx 2.5}]
+   [:circle {:cx 9 :cy 10 :r 1.8}]
+   [:path {:d "M3.5 17l5-4.5 3.5 3 3-2.5 5.5 4.5"}]])
