@@ -151,11 +151,11 @@
                     (assoc :images lib)
                     (update-in [:sequences :a :steps 0] assoc :image-id :img1 :image-fit :cover :image-position "10% 20%")
                     (assoc-in [:sequences :c :image-id] :img1))]
-    (is (= {:steps 1 :sequences 1} (edit/image-usage content :img1)))
+    (is (= {:steps 1 :sequences 1 :items 0} (edit/image-usage content :img1)))
     (is (= "Brush" (-> (edit/rename-image content :img1 " Brush ") :images :img1 :name)))
     (testing "replace repoints steps and cards, keeps fit, drops the old focus point"
       (let [after (edit/replace-image content :img1 :img2)]
-        (is (= {:steps 0 :sequences 0} (edit/image-usage after :img1)))
+        (is (= {:steps 0 :sequences 0 :items 0} (edit/image-usage after :img1)))
         (is (= {:image-id :img2 :image-fit :cover} (select-keys (get-in after [:sequences :a :steps 0]) [:image-id :image-fit :image-position])))
         (is (= :img2 (get-in after [:sequences :c :image-id])))))
     (testing "remove takes it off everything; undo puts it all back"
@@ -163,4 +163,34 @@
         (is (not (contains? (:images after) :img1)))
         (is (not-any? :image-id (get-in after [:sequences :a :steps])))
         (is (nil? (get-in after [:sequences :c :image-id])))
+        (is (= content (edit/restore-image after undo)))))))
+
+(deftest things-and-lists
+  (let [content (-> content
+                    (assoc :items {:i1 {:id :i1 :title "Cup"} :i2 {:id :i2 :title "Spoon"}}
+                           :collections {:c1 {:id :c1 :name "Snacks" :item-ids [:i1]}})
+                    (assoc-in [:sequences :a :requirements] [:i1]))
+        reqs    {:requirements :a}
+        snacks  {:collection :c1}]
+    (testing "checklists and lists share one set of operations"
+      (is (= [:i1 :new] (edit/item-list (edit/add-new-item content reqs :new "Bowl") reqs)))
+      (is (= "Bowl" (get-in (edit/add-new-item content snacks :new "Bowl") [:items :new :title])))
+      (is (= [:i1 :i2] (edit/item-list (edit/add-existing-item content snacks :i2) snacks)))
+      (is (= [:i1] (edit/item-list (edit/add-existing-item content snacks :i1) snacks)) "not twice")
+      (is (= [] (edit/item-list (edit/remove-from-list content reqs :i1) reqs)))
+      (is (contains? (:items (edit/remove-from-list content reqs :i1)) :i1) "the thing itself stays")
+      (is (= [:i2 :i1] (edit/item-list (-> content (edit/add-existing-item snacks :i2) (edit/move-in-list snacks 1 0)) snacks))))
+    (is (= "Mug" (get-in (edit/rename-item content :i1 " Mug ") [:items :i1 :title])))
+    (is (= {:checklists 1 :lists 1} (edit/item-uses content :i1)))
+    (testing "a choice step and its list"
+      (let [seq-a (edit/add-choice-step (get-in content [:sequences :a]) :s9 :c1 "Choose one")
+            content (assoc-in content [:sequences :a] seq-a)]
+        (is (= [{:title "A" :step 2}] (edit/collection-uses content :c1)))))
+    (testing "pictures on things count as uses, and deleting the picture takes them off"
+      (let [content (-> content
+                        (assoc :images {:p {:id :p :name "p" :source :local :width 4 :height 3}})
+                        (edit/set-item-image :i1 :p))
+            [after undo] (edit/remove-image content :p)]
+        (is (= 1 (:items (edit/image-usage content :p))))
+        (is (nil? (get-in after [:items :i1 :image-id])))
         (is (= content (edit/restore-image after undo)))))))

@@ -940,6 +940,81 @@ button {
   font-size: 1rem;
 }
 
+/* Things: pictures beside checklist items and choice options (step view),
+   and the list editor's rows. */
+.thing-thumb {
+  flex: none;
+  width: 4rem;
+  aspect-ratio: 4 / 3;
+  margin-left: auto;
+  border-radius: 0.5rem;
+}
+
+.list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.list-thumb {
+  flex: none;
+  width: 3.5rem;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.4rem;
+}
+
+.list-add-picture {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3.5rem;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: 2px dashed var(--color-muted);
+  border-radius: 0.4rem;
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.list-add-picture .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.list-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.list-actions {
+  display: flex;
+  flex: none;
+}
+
+.list-actions .row-action {
+  width: 2.25rem;
+  height: 2.5rem;
+}
+
+.list-name-input {
+  font-weight: 700;
+}
+
+.list-existing-choice {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 /* Confirmation dialogs */
 
 .dialog-overlay {

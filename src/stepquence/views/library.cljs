@@ -13,10 +13,14 @@
    [stepquence.views.icons :as icons]
    [stepquence.views.picture :as picture]))
 
-(defn- usage-text [steps sequences]
+(defn- usage-text [steps sequences items]
   (let [part (fn [n one many] (when (pos? n) (str n " " (if (= 1 n) one many))))]
-    (if-let [parts (seq (remove nil? [(part steps "step" "steps") (part sequences "card" "cards")]))]
-      (str "Used in " (str/join " and " parts))
+    (if-let [parts (seq (remove nil? [(part steps "step" "steps")
+                                      (part sequences "card" "cards")
+                                      (part items "thing" "things")]))]
+      (str "Used in " (if (= 1 (count parts))
+                        (first parts)
+                        (str (str/join ", " (butlast parts)) " and " (last parts))))
       "Not used")))
 
 (defn- add-button
@@ -57,9 +61,9 @@
      [:p.setting-note "There are no other pictures to use instead."])
    [:button.link-picker-cancel {:type "button" :on-click close!} "Cancel"]])
 
-(defn- library-card [{:keys [id name usage-steps usage-sequences]} others]
+(defn- library-card [{:keys [id name usage-steps usage-sequences usage-items]} others]
   (r/with-let [mode (r/atom nil)] ; nil | :replace | :confirm-delete
-    (let [used? (pos? (+ usage-steps usage-sequences))]
+    (let [used? (pos? (+ usage-steps usage-sequences usage-items))]
       [:li.library-card
        [picture/picture {:image-id id :kind :thumb :fit :cover :alt name :class "library-thumb"}]
        ^{:key name}
@@ -68,14 +72,14 @@
                            :class      "library-name-input"
                            :label      "Picture name"
                            :on-commit  #(re-frame/dispatch [::events/rename-image id %])}]
-       [:p.library-usage (usage-text usage-steps usage-sequences)]
+       [:p.library-usage (usage-text usage-steps usage-sequences usage-items)]
        (case @mode
          :replace
          [replace-chooser id others #(reset! mode nil)]
 
          :confirm-delete
          [:div.library-confirm
-          [:p (str "It's " (str/lower-case (usage-text usage-steps usage-sequences))
+          [:p (str "It's " (str/lower-case (usage-text usage-steps usage-sequences usage-items))
                    ". Those will show text only. You can undo this for a few seconds.")]
           [:div.library-actions
            [:button.settings-button {:type "button" :on-click #(reset! mode nil)} "Cancel"]

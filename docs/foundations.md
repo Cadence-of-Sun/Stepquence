@@ -122,6 +122,17 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Options are a vertical list (like the requirements checklist, with a dot where the checklist has a box), in the same order as the progress marker's dot stack, so the marker reads as a miniature of the buttons. Done is gated until an option is chosen; a choice whose collection is missing or empty is not gated (never a dead end).
 - Progress marker: a stack of dots. After choosing, ALL dots remain; the chosen one is styled as complete and the others are muted. The choice stays visible in the overview.
 
+## Things and lists (parent mode)
+- In the UI, items are "things" and collections are "lists".
+- One list editor (a dialog) serves both a sequence's checklist ("What you need") and a choice step's options. Each row has a picture slot, an editable name, ↑/↓ (focus stays on an arrow that still works) and "take off the list". The dialog also has "+ New thing" (its name selected for typing over) and "+ From existing".
+  - Names and pictures of things are shared: changing one changes it everywhere, and the dialog says so.
+  - Taking a thing off a list leaves the thing itself.
+- Where the editor opens: the "What you need" row ("2 things · Edit"); "What you need" in Sequence settings ("+ Add a checklist" when there is none); and a choice step's row ("Options: Snacks · Edit").
+- A choice step's options come from a list: pick another list, start a "New list", or rename it. When several choice steps share a list, the dialog says changes apply to all of them.
+- Adding a choice step: a small stack-of-dots button beside "+ Add step" creates "Choose one" with a new empty list "Choices" and opens its options. (An empty list never blocks Done.)
+- Pictures on things use the same picture dialog; checklist rows and choice options in the step view show them beside the name. Pictures on things count as uses on the Pictures screen, and deleting or replacing a picture updates them too.
+- Next (round B): a "Things & lists" screen in Settings, with every thing and list, usage, rename, and delete per the deletion policy.
+
 ## Linked sequences
 - `:kind :link` with `:sequence-id`: a step that walks through another, separate sequence (e.g. Bedtime → "Brush teeth"). Chosen instead of nesting sequences in the data: sequences stay flat and independently usable.
 - The step shows the linked sequence's title (renames carry over), a mini dot preview of it, and a "Start" button.
@@ -193,7 +204,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Export timing: reading pictures is asynchronous, but sharing needs a tap. The file is prepared, then shared at once if the tap still counts (`navigator.userActivation.isActive`); otherwise a "Your file is ready · Share" prompt asks for one more tap. The prepared file waits outside app-db (it can be several MB). Browsers that can't share download it straight away.
   - The Pictures screen (Settings, "Manage pictures"): every picture, two across on a phone, with its name (editable), where it's used ("Used in 2 steps and 1 card"), "Add pictures" (several at once), "Replace with…" (repoints every use; a fill focus point is dropped; undoable), and Delete (confirmation when in use, since those uses fall back to text; undoable). A deleted picture's files are removed only after the undo window, and only if it wasn't restored.
   - Sequence card pictures: "Card picture" in the editor's Sequence settings (the same picture dialog, without fit/focus: cards always fill a small 4:3 thumbnail), shown at the card's left on the sequence list.
-  - Still later: pictures from URLs (and their health check), and pictures on items (checklist and choice options), which come with the libraries step.
+  - Still later: pictures from URLs (and their health check). Pictures on things are built (see Things and lists).
 - Image blobs live in IndexedDB, never in app-db. app-db holds only IDs.
 - On import, resize via canvas to ~1024px long edge, WebP/JPEG ~80%. Store a small thumbnail blob too, for the overview and pickers.
 - Display via `URL.createObjectURL`. Cache these URLs in ephemeral state and revoke unused ones.

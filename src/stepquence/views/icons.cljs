@@ -149,3 +149,12 @@
      ^{:key angle}
      [:line {:x1 12 :y1 5 :x2 12 :y2 3 :stroke-width 3
              :transform (str "rotate(" angle " 12 12)")}])])
+
+(defn choice
+  "A vertical stack of dots, one filled: a choice step (as in the progress
+  bar's choice marker)."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:circle {:cx 12 :cy 5 :r 2.6 :fill "none" :stroke "currentColor" :stroke-width 2}]
+   [:circle {:cx 12 :cy 12 :r 2.6 :fill "currentColor"}]
+   [:circle {:cx 12 :cy 19 :r 2.6 :fill "none" :stroke "currentColor" :stroke-width 2}]])

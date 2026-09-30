@@ -243,6 +243,8 @@
    ;; The picture dialog: {:target {:step-id …}|{:sequence-id …} :busy? …
    ;; :error …} while open.
    [:picture-editor {:optional true} [:maybe :map]]
+   ;; The list editor (checklist or a choice step's list): {:target …}.
+   [:list-editor {:optional true} [:maybe :map]]
    ;; Pictures screen: files still being added, and the last failure.
    [:library-busy {:optional true} [:maybe nat-int?]]
    [:library-error {:optional true} [:maybe :string]]

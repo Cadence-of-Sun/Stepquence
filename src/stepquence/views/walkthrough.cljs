@@ -113,6 +113,7 @@
      [:div.overview-scroll
       [editor/overview-editor]
       [editor/sequence-settings]]
+     [editor/list-dialog]
      [editor/picture-dialog]]
     [:<>
      [sequence-heading :h1]
@@ -126,7 +127,7 @@
   [:<>
    [:h1.card-title "What you need"]
    [:ul.checklist
-    (for [{:keys [id title checked?]} @(re-frame/subscribe [::subs/requirements])]
+    (for [{:keys [id title checked? image-id]} @(re-frame/subscribe [::subs/requirements])]
       ^{:key (str id)}
       [:li
        [:button.check-item
@@ -135,7 +136,10 @@
          :aria-checked checked?
          :on-click     #(re-frame/dispatch [::events/toggle-requirement id])}
         [:span.check-box]
-        [:span.check-label title]]])]])
+        [:span.check-label title]
+        ;; The thing's picture, when it has one.
+        (when image-id
+          [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "thing-thumb"}])]])]])
 
 (defn- choice-options [step]
   ;; Vertical, in the same order as the dot stack in the progress bar;
@@ -143,7 +147,7 @@
   (let [options @(re-frame/subscribe [::subs/choice-options])]
     (when (seq options)
       [:ul.choices
-       (for [{:keys [id title chosen?]} options]
+       (for [{:keys [id title chosen? image-id]} options]
          ^{:key (str id)}
          [:li
           [:button.choice
@@ -151,7 +155,9 @@
             :aria-pressed chosen?
             :on-click     #(re-frame/dispatch [::events/choose (:id step) id])}
            [:span.choice-dot]
-           [:span.choice-label title]]])])))
+           [:span.choice-label title]
+           (when image-id
+             [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "thing-thumb"}])]])])))
 
 (defn- step-card []
   (let [{:keys [kind title description image-id image-fit image-position] :as step}

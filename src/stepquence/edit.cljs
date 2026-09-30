@@ -386,11 +386,17 @@
            step)))
 
 (defn image-usage
-  "{:steps n :sequences m}: steps showing picture `image-id`, and sequences
-  using it as their card picture."
+  "{:steps n :sequences m :items k}: steps showing picture `image-id`,
+  sequences using it as their card picture, and things (items) shown with
+  it."
   [content image-id]
   {:steps     (image-uses content image-id)
-   :sequences (count (filter #(= image-id (:image-id %)) (vals (:sequences content))))})
+   :sequences (count (filter #(= image-id (:image-id %)) (vals (:sequences content))))
+   :items     (count (filter #(= image-id (:image-id %)) (vals (:items content))))})
+
+(defn- map-items [content f]
+  (cond-> content
+    (:items content) (update :items #(into {} (map (fn [[id item]] [id (f item)])) %))))
 
 (defn set-sequence-image [sequence image-id]
   (assoc sequence :image-id image-id))
@@ -408,20 +414,21 @@
   (update content :sequences #(into {} (map (fn [[id s]] [id (f s)])) %)))
 
 (defn replace-image
-  "Point every use of picture `from` (steps and sequence cards) at `to`. A
-  step keeps its fit; a fill focus point is dropped (it was for the old
-  picture)."
+  "Point every use of picture `from` (steps, sequence cards, things) at
+  `to`. A step keeps its fit; a fill focus point is dropped (it was for the
+  old picture)."
   [content from to]
   (if (and (not= from to) (get-in content [:images to]))
-    (map-sequences content
-                   (fn [s]
-                     (cond-> (update s :steps
-                                     (fn [steps]
-                                       (mapv #(if (= from (:image-id %))
-                                                (-> % (assoc :image-id to) (dissoc :image-position))
-                                                %)
-                                             steps)))
-                       (= from (:image-id s)) (assoc :image-id to))))
+    (-> content
+        (map-sequences (fn [s]
+                         (cond-> (update s :steps
+                                         (fn [steps]
+                                           (mapv #(if (= from (:image-id %))
+                                                    (-> % (assoc :image-id to) (dissoc :image-position))
+                                                    %)
+                                                 steps)))
+                           (= from (:image-id s)) (assoc :image-id to))))
+        (map-items #(cond-> % (= from (:image-id %)) (assoc :image-id to))))
     content))
 
 (defn remove-image
@@ -433,7 +440,8 @@
                                step (:steps s)
                                :when (= image-id (:image-id step))]
                            [(:id s) (:id step) (select-keys step [:image-fit :image-position])]))
-          seq-refs  (vec (keep #(when (= image-id (:image-id %)) (:id %)) (vals (:sequences content))))]
+          seq-refs  (vec (keep #(when (= image-id (:image-id %)) (:id %)) (vals (:sequences content))))
+          item-refs (vec (keep #(when (= image-id (:image-id %)) (:id %)) (vals (:items content))))]
       [(-> content
            (update :images dissoc image-id)
            (map-sequences (fn [s]
@@ -443,14 +451,15 @@
                                                        (dissoc % :image-id :image-fit :image-position)
                                                        %)
                                                     steps)))
-                              (= image-id (:image-id s)) (dissoc :image-id)))))
-       {:image image :step-refs step-refs :seq-refs seq-refs}])
+                              (= image-id (:image-id s)) (dissoc :image-id))))
+           (map-items #(cond-> % (= image-id (:image-id %)) (dissoc :image-id))))
+       {:image image :step-refs step-refs :seq-refs seq-refs :item-refs item-refs}])
     [content nil]))
 
 (defn restore-image
   "Undo remove-image: the picture returns, and so do its uses (where the
   step or sequence still exists)."
-  [content {:keys [image step-refs seq-refs]}]
+  [content {:keys [image step-refs seq-refs item-refs]}]
   (let [id      (:id image)
         content (assoc-in content [:images id] image)
         content (reduce (fn [c [sid step-id framing]]
@@ -459,5 +468,105 @@
                                        #(merge (assoc % :image-id id) framing))
                             c))
                         content step-refs)]
-    (reduce (fn [c sid] (cond-> c (get-in c [:sequences sid]) (assoc-in [:sequences sid :image-id] id)))
-            content seq-refs)))
+    (as-> content c
+      (reduce (fn [c sid] (cond-> c (get-in c [:sequences sid]) (assoc-in [:sequences sid :image-id] id)))
+              c seq-refs)
+      (reduce (fn [c iid] (cond-> c (get-in c [:items iid]) (assoc-in [:items iid :image-id] id)))
+              c item-refs))))
+
+;; ---------------------------------------------------------------------------
+;; Things (items) and lists (collections)
+;;
+;; An "item list" is an ordered vector of item ids with an owner: a
+;; sequence's checklist ({:requirements sequence-id}) or a list used by
+;; choice steps ({:collection collection-id}).
+
+(defn- list-path [{:keys [requirements collection]}]
+  (cond
+    requirements [:sequences requirements :requirements]
+    collection   [:collections collection :item-ids]))
+
+(defn item-list [content target]
+  (when-let [path (list-path target)]
+    (get-in content path [])))
+
+(defn- update-item-list [content target f]
+  (let [path (list-path target)]
+    (if (and path (get-in content (butlast path)))
+      (update-in content path (fnil f []))
+      content)))
+
+(defn add-new-item
+  "A new thing titled `title`, appended to the list."
+  [content target item-id title]
+  (-> content
+      (assoc-in [:items item-id] {:id item-id :title title})
+      (update-item-list target #(conj % item-id))))
+
+(defn add-existing-item
+  "Append an existing thing (not twice)."
+  [content target item-id]
+  (if (get-in content [:items item-id])
+    (update-item-list content target #(if (some #{item-id} %) % (conj % item-id)))
+    content))
+
+(defn remove-from-list
+  "Take a thing off the list; the thing itself stays."
+  [content target item-id]
+  (update-item-list content target #(into [] (remove #{item-id}) %)))
+
+(defn move-in-list [content target from to]
+  (update-item-list content target
+                    (fn [ids]
+                      (let [n (count ids)]
+                        (if (and (< -1 from n) (< -1 to n) (not= from to))
+                          (let [x       (get ids from)
+                                without (into (subvec ids 0 from) (subvec ids (inc from)))]
+                            (into (conj (subvec without 0 to) x) (subvec without to)))
+                          ids)))))
+
+(defn rename-item [content item-id title]
+  (let [title (clip (str/trim title) schema/max-name)]
+    (if (and (get-in content [:items item-id]) (not (str/blank? title)))
+      (assoc-in content [:items item-id :title] title)
+      content)))
+
+(defn set-item-image [content item-id image-id]
+  (if (get-in content [:items item-id])
+    (if image-id
+      (assoc-in content [:items item-id :image-id] image-id)
+      (update-in content [:items item-id] dissoc :image-id))
+    content))
+
+(defn add-collection [content collection-id name]
+  (assoc-in content [:collections collection-id] {:id collection-id :name name :item-ids []}))
+
+(defn rename-collection [content collection-id name]
+  (let [name (clip (str/trim name) schema/max-name)]
+    (if (and (get-in content [:collections collection-id]) (not (str/blank? name)))
+      (assoc-in content [:collections collection-id :name] name)
+      content)))
+
+(defn collection-uses
+  "Choice steps using list `collection-id`: [{:title sequence :step n}]."
+  [content collection-id]
+  (vec (for [s (vals (:sequences content))
+             [i step] (map-indexed vector (:steps s))
+             :when (and (= :choice (:kind step)) (= collection-id (:collection-id step)))]
+         {:title (:title s) :step (inc i)})))
+
+(defn item-uses
+  "How many checklists and lists a thing is on."
+  [content item-id]
+  {:checklists (count (filter #(some #{item-id} (:requirements %)) (vals (:sequences content))))
+   :lists      (count (filter #(some #{item-id} (:item-ids %)) (vals (:collections content))))})
+
+(defn set-choice-collection [sequence step-id collection-id]
+  (update-step sequence step-id #(assoc % :collection-id collection-id)))
+
+(defn add-choice-step
+  "Appends a choice step offering list `collection-id` (unless full)."
+  [sequence step-id collection-id title]
+  (if (can-add-step? sequence)
+    (update sequence :steps conj {:id step-id :kind :choice :title title :collection-id collection-id})
+    sequence))

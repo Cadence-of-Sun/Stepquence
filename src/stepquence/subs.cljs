@@ -118,6 +118,12 @@
    (get-in content [:sequences (:sequence-id r)])))
 
 (re-frame/reg-sub
+ ::run-sequence-id
+ :<- [::run]
+ (fn [r]
+   (:sequence-id r)))
+
+(re-frame/reg-sub
  ::active-ids
  :<- [::run]
  :<- [::run-stack]
@@ -309,10 +315,11 @@
  ;; For the editor's "Sequence" section.
  :<- [::content]
  :<- [::run-sequence]
- (fn [[content {:keys [id days image-id]}]]
+ (fn [[content {:keys [id days image-id requirements]}]]
    (when id
-     {:id       id
-      :image-id image-id
+     {:id           id
+      :requirements requirements
+      :image-id     image-id
       :days     days
       :group-id (some #(when (some #{id} (:sequence-ids %)) (:id %)) (:groups content))
       :groups   (mapv #(select-keys % [:id :name]) (:groups content))
@@ -376,9 +383,42 @@
  (fn [[{:keys [target] :as state} run-seq content]]
    (when state
      (assoc state :subject
-            (if-let [step-id (:step-id target)]
-              (some #(when (= step-id (:id %)) %) (:steps run-seq))
-              (get-in content [:sequences (:sequence-id target)]))))))
+            (cond
+              (:step-id target) (some #(when (= (:step-id target) (:id %)) %) (:steps run-seq))
+              (:item-id target) (get-in content [:items (:item-id target)])
+              :else             (get-in content [:sequences (:sequence-id target)]))))))
+
+(re-frame/reg-sub
+ ::list-editor-state
+ (fn [db]
+   (get-in db [:ui :list-editor])))
+
+(re-frame/reg-sub
+ ::list-editor
+ ;; What the open list editor shows: the things on the list, and for a
+ ;; choice step its list, the other lists, and where else that list is used.
+ :<- [::list-editor-state]
+ :<- [::run-sequence]
+ :<- [::content]
+ (fn [[state run-seq content]]
+   (when-let [{:keys [target]} state]
+     (let [step      (when-let [sid (:step-id target)] (some #(when (= sid (:id %)) %) (:steps run-seq)))
+           cid       (:collection-id step)
+           ids       (if (:step-id target)
+                       (get-in content [:collections cid :item-ids] [])
+                       (get-in content [:sequences (:requirements target) :requirements] []))
+           on-list   (set ids)]
+       {:target      target
+        :kind        (if (:step-id target) :choice :checklist)
+        :title       (if step (:title step) (get-in content [:sequences (:requirements target) :title]))
+        :items       (into [] (keep (:items content)) ids)
+        :others      (->> (vals (:items content))
+                          (remove #(on-list (:id %)))
+                          (sort-by (comp str/lower-case :title))
+                          vec)
+        :collection  (get-in content [:collections cid])
+        :collections (->> (vals (:collections content)) (sort-by (comp str/lower-case :name)) vec)
+        :uses        (when cid (edit/collection-uses content cid))}))))
 
 (re-frame/reg-sub
  ::image-library
@@ -388,8 +428,8 @@
    (->> (vals (:images content))
         (sort-by (comp str/lower-case :name))
         (mapv #(merge % {:uses (edit/image-uses content (:id %))}
-                      (let [{:keys [steps sequences]} (edit/image-usage content (:id %))]
-                        {:usage-steps steps :usage-sequences sequences}))))))
+                      (let [{:keys [steps sequences items]} (edit/image-usage content (:id %))]
+                        {:usage-steps steps :usage-sequences sequences :usage-items items}))))))
 
 (re-frame/reg-sub
  ::library-status

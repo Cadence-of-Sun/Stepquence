@@ -409,6 +409,7 @@
                          (assoc-in [:ui :import] nil)
                          (assoc-in [:ui :picture-editor] nil)
                          (assoc-in [:ui :export] nil)
+                         (assoc-in [:ui :list-editor] nil)
                          (cond-> (= :library (get-in db [:ui :screen])) (assoc-in [:ui :screen] :home)))]
      (-> (if previewing? (leave-home db) {:db db})
          (update :fx (fnil conj []) [:parent/idle-lock nil])))))
@@ -935,8 +936,9 @@
 
 (defn- apply-picture
   "Put library picture `image-id` on `target` (nil removes it)."
-  [db {:keys [step-id sequence-id]} image-id]
+  [db {:keys [step-id sequence-id item-id]} image-id]
   (cond
+    item-id     (edit-content db #(edit/set-item-image % item-id image-id))
     step-id     (edit-sequence db #(if image-id
                                      (edit/set-step-image % step-id image-id)
                                      (edit/clear-step-image % step-id)))
@@ -1084,3 +1086,96 @@
  (fn-traced [{:keys [db]} [_ image-id]]
    (when-not (get-in db [:content :images image-id])
      {:fx [[:images/delete image-id]]})))
+
+;; ---------------------------------------------------------------------------
+;; Things and lists (parent mode). The list editor edits one item list:
+;; the previewed sequence's checklist ({:requirements sequence-id}) or a
+;; choice step's list ({:step-id …}, whose list can also be switched).
+
+(defn- list-target
+  "The item list an editor target means: a checklist as is; a choice step
+  means its current list."
+  [db {:keys [step-id] :as target}]
+  (if step-id
+    (let [seq-id (get-in db [:run :sequence-id])
+          step   (some #(when (= step-id (:id %)) %) (get-in db [:content :sequences seq-id :steps]))]
+      (when-let [cid (:collection-id step)] {:collection cid}))
+    target))
+
+(re-frame/reg-event-db
+ ::open-list-editor
+ (fn-traced [db [_ target]]
+   (cond-> db (parent? db) (assoc-in [:ui :list-editor] {:target target}))))
+
+(re-frame/reg-event-db
+ ::close-list-editor
+ (fn-traced [db _]
+   (assoc-in db [:ui :list-editor] nil)))
+
+(re-frame/reg-event-fx
+ ::list-add-new
+ ;; A new thing, its name selected for typing over.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} [_ target]]
+   (when-let [lt (and (parent? db) (list-target db target))]
+     {:db (update db :content edit/add-new-item lt new-id "New thing")
+      :fx [[:focus {:selector (str "[data-item-for=\"" new-id "\"]") :select? true}]]})))
+
+(re-frame/reg-event-db
+ ::list-add-existing
+ (fn-traced [db [_ target item-id]]
+   (if-let [lt (and (parent? db) (list-target db target))]
+     (update db :content edit/add-existing-item lt item-id)
+     db)))
+
+(re-frame/reg-event-db
+ ::list-remove
+ (fn-traced [db [_ target item-id]]
+   (if-let [lt (and (parent? db) (list-target db target))]
+     (update db :content edit/remove-from-list lt item-id)
+     db)))
+
+(re-frame/reg-event-fx
+ ::list-move
+ (fn-traced [{:keys [db]} [_ target from to refocus]]
+   (when-let [lt (and (parent? db) (list-target db target))]
+     (cond-> {:db (update db :content edit/move-in-list lt from to)}
+       refocus (assoc :fx [[:focus {:selector refocus}]])))))
+
+(re-frame/reg-event-db
+ ::rename-item
+ (fn-traced [db [_ item-id title]]
+   (edit-content db #(edit/rename-item % item-id title))))
+
+(re-frame/reg-event-db
+ ::set-step-collection
+ (fn-traced [db [_ step-id collection-id]]
+   (edit-sequence db #(edit/set-choice-collection % step-id collection-id))))
+
+(re-frame/reg-event-fx
+ ::new-list-for-step
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} [_ step-id]]
+   (when (parent? db)
+     {:db (-> db
+              (update :content edit/add-collection new-id "New list")
+              (edit-sequence #(edit/set-choice-collection % step-id new-id)))
+      :fx [[:focus {:selector ".list-name-input" :select? true}]]})))
+
+(re-frame/reg-event-db
+ ::rename-collection
+ (fn-traced [db [_ collection-id name]]
+   (edit-content db #(edit/rename-collection % collection-id name))))
+
+(re-frame/reg-event-fx
+ ::add-choice-step
+ ;; A "Choose one" step with a new, empty list, opened for filling in.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} _]
+   (when (parent? db)
+     (let [collection-id (random-uuid)
+           db'           (-> db
+                             (update :content edit/add-collection collection-id "Choices")
+                             (edit-sequence #(edit/add-choice-step % new-id collection-id "Choose one") true))]
+       (when (some #(= new-id (:id %)) (get-in db' [:content :sequences (get-in db [:run :sequence-id]) :steps]))
+         {:db (assoc-in db' [:ui :list-editor] {:target {:step-id new-id}})})))))

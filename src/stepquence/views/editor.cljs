@@ -154,15 +154,19 @@
    [icons/arrow-right]])
 
 (defn- requirements-row [{:keys [item-count current? done?] :as row}]
+  (let [seq-id @(re-frame/subscribe [::subs/run-sequence-id])]
   [:li.overview-row {:class [(when current? "is-current") (when done? "is-done")]}
    [:div.overview-row-inner
     [:span.drag-spacer]
     [marker-cell row]
     [:span.overview-text
      [:span.overview-title "What you need"]
-     [:span.overview-detail (str item-count (if (= 1 item-count) " item" " items"))]]
+     [:button.add-description
+      {:type     "button"
+       :on-click #(re-frame/dispatch [::events/open-list-editor {:requirements seq-id}])}
+      (str item-count (if (= 1 item-count) " thing" " things") " · Edit")]]
     [:span.row-actions
-     [go-button row]]]])
+     [go-button row]]]]))
 
 (defn- picture-slot
   "The step's picture as a small thumbnail (tap to change), or \"+ Picture\"."
@@ -206,7 +210,10 @@
                      :attrs      {:data-title-for (str id)}
                      :on-commit  #(re-frame/dispatch [::events/edit-step-title id %])}]
         (when (= :choice kind)
-          [:span.overview-detail (str "Choice from " (or collection-name "a missing collection"))])
+          [:button.add-description
+           {:type     "button"
+            :on-click #(re-frame/dispatch [::events/open-list-editor {:step-id id}])}
+           (str "Options: " (or collection-name "none yet") " · Edit")])
         ^{:key (str id "|" description)}
         [description-field id description]
         (when (= :task kind)
@@ -243,8 +250,9 @@
      [:button.link-picker-cancel {:type "button" :on-click close!} "Cancel"]]))
 
 (defn- add-row
-  "+ Add step, and beside it (with at least two sequences) a smaller button
-  to add a step that links another sequence."
+  "+ Add step, and beside it smaller buttons for the other kinds: a choice
+  step, and (with at least two sequences) a step that links another
+  sequence."
   []
   (r/with-let [picking? (r/atom false)]
     [:<>
@@ -253,6 +261,12 @@
        {:type     "button"
         :on-click #(re-frame/dispatch [::events/add-step])}
        [icons/plus] "Add step"]
+      [:button.add-link
+       {:type       "button"
+        :aria-label "Add a choice step"
+        :title      "Add a choice"
+        :on-click   #(re-frame/dispatch [::events/add-choice-step])}
+       [icons/choice]]
       (when (>= @(re-frame/subscribe [::subs/sequence-count]) 2)
         [:button.add-link
          {:type          "button"
@@ -300,10 +314,20 @@
   [["Every day" edit/every-day] ["Weekdays" edit/weekdays] ["Weekends" edit/weekends]])
 
 (defn sequence-settings []
-  (when-let [{:keys [id days group-id groups links-to image-id]} @(re-frame/subscribe [::subs/sequence-settings])]
+  (when-let [{:keys [id days group-id groups links-to image-id requirements]} @(re-frame/subscribe [::subs/sequence-settings])]
     (let [set-days! #(re-frame/dispatch [::events/set-sequence-days id %])]
       [:section.sequence-settings
        [:h2.settings-heading "Sequence settings"]
+
+       [:div.setting
+        [:span.setting-label "What you need"]
+        [:button.settings-button
+         {:type     "button"
+          :on-click #(re-frame/dispatch [::events/open-list-editor {:requirements id}])}
+         (if (seq requirements)
+           (str (count requirements) (if (= 1 (count requirements)) " thing" " things") " · Edit")
+           "+ Add a checklist")]
+        [:p.setting-note "Things to gather before step 1, ticked off by the child."]]
 
        [:div.setting
         [:span.setting-label "Card picture"]
@@ -445,7 +469,9 @@
         [:div.dialog-overlay
          [:div.dialog.picture-dialog {:role "dialog" :aria-modal true :aria-labelledby "picture-title"}
           [:h2#picture-title.dialog-title
-           (if step? (str "Picture for \"" title "\"") (str "Card picture for \"" title "\""))]
+           (cond
+             (contains? target :sequence-id) (str "Card picture for \"" title "\"")
+             :else                           (str "Picture for \"" title "\""))]
           (cond
             busy?    [:p.setting-note "Adding the picture…"]
             error    [:p.setting-note error]
@@ -473,5 +499,116 @@
               "Remove picture"])]
           (when @browsing?
             [library-grid target image-id #(reset! browsing? false)])
+          [:div.dialog-actions
+           [:button.dialog-button {:type "button" :on-click close!} "Done"]]]]))))
+
+;; ---------------------------------------------------------------------------
+;; List editor: a checklist ("What you need") or a choice step's options.
+;; Things are shared: renaming or re-picturing one changes it everywhere.
+
+(defn- list-row [target {:keys [id title image-id]} i n]
+  (let [move! (fn [to]
+                ;; Keep keyboard focus on an arrow that still works: at the
+                ;; top the up arrow is disabled, at the bottom the down one.
+                (let [attr (cond (zero? to) "data-down" (= to (dec n)) "data-up"
+                                 (< to i) "data-up" :else "data-down")]
+                  #(re-frame/dispatch [::events/list-move target i to (str "[" attr "=\"" id "\"]")])))]
+    [:li.list-row
+     (if image-id
+       [:button.picture-slot
+        {:type "button" :aria-label (str "Picture for \"" title "\"")
+         :on-click #(re-frame/dispatch [::events/open-picture-editor {:item-id id}])}
+        [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "list-thumb"}]]
+       [:button.list-add-picture
+        {:type "button" :aria-label (str "Add a picture for \"" title "\"")
+         :on-click #(re-frame/dispatch [::events/open-picture-editor {:item-id id}])}
+        [icons/plus]])
+     ^{:key title}
+     [fields/text-field {:value      title
+                         :max-length schema/max-name
+                         :class      "list-name"
+                         :label      "Name"
+                         :attrs      {:data-item-for (str id)}
+                         :on-commit  #(re-frame/dispatch [::events/rename-item id %])}]
+     [:span.list-actions
+      [:button.row-action {:type "button" :disabled (zero? i) :data-up (str id)
+                           :aria-label (str "Move \"" title "\" up") :on-click (move! (dec i))}
+       [icons/chevron-up]]
+      [:button.row-action {:type "button" :disabled (= i (dec n)) :data-down (str id)
+                           :aria-label (str "Move \"" title "\" down") :on-click (move! (inc i))}
+       [icons/chevron-down]]
+      [:button.row-action {:type "button" :aria-label (str "Take \"" title "\" off the list")
+                           :on-click #(re-frame/dispatch [::events/list-remove target id])}
+       [icons/trash]]]]))
+
+(defn- existing-picker [target others close!]
+  [:div.list-existing
+   (if (seq others)
+     [:ul.link-picker-list
+      (for [{:keys [id title image-id]} others]
+        ^{:key (str id)}
+        [:li
+         [:button.link-choice.list-existing-choice
+          {:type "button"
+           :on-click #(re-frame/dispatch [::events/list-add-existing target id])}
+          (when image-id
+            [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "list-thumb"}])
+          [:span.link-choice-title title]]])]
+     [:p.setting-note "Every thing is already on this list."])
+   [:button.link-picker-cancel {:type "button" :on-click close!} "Done adding"]])
+
+(defn list-dialog []
+  (r/with-let [adding? (r/atom false)]
+    (when-let [{:keys [target kind title items others collection collections uses]}
+               @(re-frame/subscribe [::subs/list-editor])]
+      (let [close! #(do (reset! adding? false) (re-frame/dispatch [::events/close-list-editor]))
+            choice? (= :choice kind)]
+        [:div.dialog-overlay
+         [:div.dialog.picture-dialog {:role "dialog" :aria-modal true :aria-labelledby "list-title"}
+          [:h2#list-title.dialog-title
+           (if choice? (str "Options for \"" title "\"") (str "What you need for \"" title "\""))]
+          (when choice?
+            [:div.setting
+             [:label.setting-label {:for "list-choice"} "List"]
+             [:select.setting-select
+              {:id        "list-choice"
+               :value     (str (:id collection))
+               :on-change (fn [e]
+                            (let [v (.. e -target -value)]
+                              (if (= v "new")
+                                (re-frame/dispatch [::events/new-list-for-step (:step-id target)])
+                                (re-frame/dispatch [::events/set-step-collection (:step-id target) (uuid v)]))))}
+              (when-not collection [:option {:value ""} "Choose a list…"])
+              (for [{cid :id cname :name} collections]
+                ^{:key (str cid)}
+                [:option {:value (str cid)} cname])
+              [:option {:value "new"} "New list"]]
+             (when collection
+               ^{:key (str (:id collection) (:name collection))}
+               [fields/text-field {:value      (:name collection)
+                                   :max-length schema/max-name
+                                   :class      "list-name-input"
+                                   :label      "List name"
+                                   :on-commit  #(re-frame/dispatch [::events/rename-collection (:id collection) %])}])
+             (when (> (count uses) 1)
+               [:p.setting-note (str "This list is used by " (count uses)
+                                     " choice steps; changes apply to all of them.")])])
+          (if (seq items)
+            [:ol.list-rows
+             (for [[i item] (map-indexed vector items)]
+               ^{:key (str (:id item))}
+               [list-row target item i (count items)])]
+            [:p.setting-note (if choice? "No options yet." "Nothing on the list yet.")])
+          (when (or (not choice?) collection)
+            [:div.picture-actions
+             [:button.dialog-button.is-primary
+              {:type "button" :on-click #(re-frame/dispatch [::events/list-add-new target])}
+              "+ New thing"]
+             [:button.dialog-button
+              {:type "button" :aria-expanded @adding? :on-click #(swap! adding? not)}
+              "+ From existing"]])
+          (when @adding?
+            [existing-picker target others #(reset! adding? false)])
+          [:p.setting-note "Names and pictures of things are shared: changing one changes it everywhere it's used."]
           [:div.dialog-actions
            [:button.dialog-button {:type "button" :on-click close!} "Done"]]]]))))
