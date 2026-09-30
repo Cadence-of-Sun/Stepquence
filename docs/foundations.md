@@ -60,6 +60,8 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Revisited (already-completed) positions have nothing to do, only pages to turn: the primary button is hidden (keeping its space), and the corners become a symmetric pair of neutral page turns, "← Back" and "Next →". Done returns on reaching the first not-yet-done step.
 - Buttons are the primary input. No swipe navigation (possibly opt-in later, off by default).
 - Sequence end: an unambiguous "All done!" screen: a check-circle that draws itself in, the sequence's title, "All done!", and one big button (Exit; Continue → inside a linked sequence). The progress bar stays, fully filled and underlined.
+  - When the sequence has a card picture, it's shown here too (the 4:3 frame, filled), with the drawn check as a stamp on its bottom-right corner, so the child sees which routine he just finished. Without one, the check alone as before.
+- Tapping a picture in the step view (or on the finished screen) gets a soft, springy response: a slight press-in, a small overshoot, settling back, about half a second (Web Animations API; a new tap restarts it). With reduced motion, a brief soft dim instead. It's only a response and does nothing else (not announced as a button).
 - HARD CAP: 12 steps per sequence (a single named constant).
 - Screen Wake Lock API is active during walkthroughs.
 

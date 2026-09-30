@@ -2112,6 +2112,43 @@ button {
 }
 
 /* A check-circle that draws itself in: circle, then check. */
+/* The sequence's picture on the finished screen, with the check as a
+   stamp on its corner. */
+.finished-picture {
+  position: relative;
+  /* Exactly the step picture frame's size, so the stamp sits on its corner. */
+  width: min(100%, 36rem, calc(100cqh * 4 / 3));
+  aspect-ratio: 4 / 3;
+}
+
+.finished-picture .step-picture {
+  width: 100%;
+}
+
+.finished-stamp {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-bg);
+  transform: translate(25%, 25%);
+}
+
+.finished-stamp .finished-mark {
+  width: clamp(3.5rem, 10vw, 5rem);
+  height: clamp(3.5rem, 10vw, 5rem);
+}
+
+/* Pictures in the step view answer a tap (see picture/soft-bounce!). */
+.picture.is-bouncy {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+}
+
 .finished-mark {
   width: clamp(4rem, 12vw, 6rem);
   height: clamp(4rem, 12vw, 6rem);

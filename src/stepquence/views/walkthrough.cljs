@@ -174,7 +174,8 @@
                           :fit      image-fit
                           :position image-position
                           :alt      title
-                          :class    "step-picture"}]])
+                          :class    "step-picture"
+                          :bouncy?  true}]])
      [:h1.card-title title]
      (when description
        [:p.card-description description])
@@ -186,11 +187,22 @@
      (when (and (= :task kind) timer-seconds)
        ^{:key (str id)} [timer/step-timer id timer-seconds])]))
 
-(defn- finished-card []
-  [:<>
-   [icons/check-circle]
-   [:p.finished-sequence (:title @(re-frame/subscribe [::subs/run-sequence]))]
-   [:h1.card-title.finished-title "All done!"]])
+(defn- finished-card
+  "The sequence's own picture, when it has one, stamped with the drawn
+  check; otherwise just the check. Then its name and \"All done!\"."
+  []
+  (let [{:keys [title image-id]} @(re-frame/subscribe [::subs/run-sequence])
+        show? (and image-id (not (images/failed? (images/url image-id :full))))]
+    [:<>
+     (if show?
+       [:div.card-picture-area
+        [:div.finished-picture
+         [picture/picture {:image-id image-id :kind :full :fit :cover :alt title
+                           :class "step-picture" :bouncy? true}]
+         [:span.finished-stamp [icons/check-circle]]]]
+       [icons/check-circle])
+     [:p.finished-sequence title]
+     [:h1.card-title.finished-title "All done!"]]))
 
 (defn- card []
   (let [phase     @(re-frame/subscribe [::subs/phase])
