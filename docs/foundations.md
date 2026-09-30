@@ -106,6 +106,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Group: a dropdown. Moving appends to the new group. Reordering within a group isn't built yet.
   - Days: presets (Every day / Weekdays / Weekends) plus seven day toggles. The day set is the single source of truth, so a preset is simply highlighted when the set matches it. With no days selected, a note says the sequence won't appear on the child's list.
   - Delete sequence, with undo. It's refused while other sequences link to it, and the note names every one ("Get dressed (step 7), Bedtime (step 5) link to this sequence. Remove those steps first…"), per the no-dangling-references rule. Deleting also clears today's done and resume entries for it.
+- Consistency: after every event, a global interceptor checks that the screen points at real data. If the open sequence (or one waiting on it through a link) no longer exists, for example because an undo removed it while it was open, the app returns to the sequence list. Selected ids that no longer exist drop out of the selection. Locking and unlocking both clear transient parent state (PIN pad, undo offers, selection, pending import).
 - Undo is a short stack: each delete gets its own 6-second window. The toast (on any screen) shows the most recent, with a count when several are on offer ("Group deleted · 3"). Undo reverses the most recent, and the earlier ones stay on offer until they expire. Each entry carries the event that reverses it.
 - Adding a link step: a small link-icon button next to "+ Add step" (shown when there are at least two sequences) opens a picker. It lists only sequences that can't lead back to this one through links (not itself, and no loops at any depth), so the editor can't create a cycle. The walkthrough still guards against cycles in imported data.
 
@@ -206,7 +207,15 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Before replacing, the current data is copied to `stepquence.app-db.before-import-<ms>` in IndexedDB, and the restore can be undone from the toast for a few seconds.
   - Today's progress starts fresh; the backup's export time becomes the "last backed up" time.
 - The Settings popover shows "Last backed up N days ago" (or "Not backed up yet", emphasized from 14 days on) with Export and Import buttons.
-- Later: single-sequence export for sharing with teachers or therapists, imported as a merge. IDs are random UUIDs, so a matching ID means the same sequence (exported from here earlier, or shared back and forth). On a match, offer "Update mine" (replace in place, keeping its group and schedule here; referenced items and images match by ID too) or "Keep both" (import as a copy with fresh IDs). Anything new is simply added.
+- Sharing chosen sequences (e.g. with a teacher or therapist), in `stepquence.share`:
+  - Choose on the parent sequence list: "Select" puts a select mark on each card, and a bar at the bottom shows the count and the actions. While selecting, taps only select, and the add and group controls step aside. The editor's Sequence settings also has "Share this sequence".
+  - Select mode's actions: Export; Move to… (any group, or "New group", which creates it, moves the selection in, and puts its name up for editing); Delete. Delete is one undo for all. It's refused while a selected sequence is linked from a sequence outside the selection, and the bar names the link ("Brush teeth is linked from Bedtime"); selecting both allows it.
+  - The file (`:stepquence/sequences 1`; named after the sequence when there's one, e.g. `stepquence-bedtime.edn`) is self-contained: the chosen sequences, every sequence they link to at any depth (so no link can dangle; the bar and editor say what comes along, e.g. "Also includes Brush teeth, which is linked"), the items and collections they use, and their groups holding only them. Pictures will travel the same way.
+- Import (the same button) recognizes the file: a backup means a full restore; shared sequences mean a merge. The merge dialog lists each incoming sequence:
+  - Not on this device: "New", added to its group (that group by id if it's here; otherwise created from the file's name; Ungrouped if the file has none for it).
+  - Already here (same id, which means the same sequence): choose "Update mine" (the default; replace title, steps and requirements in place, keeping this device's group and schedule, and clearing its resume position for today) or "Keep both" (a copy with fresh sequence and step ids; links inside the file are pointed at the copies).
+  - Items and collections are added if missing; ones already here keep this device's version, so a merge never quietly changes existing sequences' items.
+  - The merge can be undone from the toast ("1 updated, 1 copied").
 
 ## Platform and accessibility
 - Service worker caches the app shell for offline use.

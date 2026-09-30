@@ -229,9 +229,12 @@
                                              [:message :string]
                                              [:restore [:vector :any]]
                                              [:token number?]]]]]
-   ;; A backup file being imported: {:data … :summary …} awaiting
+   ;; A file being imported: a backup {:kind :backup :data :summary} or
+   ;; shared sequences {:kind :sequences :data :rows :choices} awaiting
    ;; confirmation, or {:error …}.
    [:import {:optional true} [:maybe :map]]
+   ;; Sequences chosen for sharing, while selecting on the list.
+   [:selection {:optional true} [:maybe [:set :uuid]]]
    ;; PIN pad state while it is open.
    [:pin-entry {:optional true} [:maybe PinEntry]]])
 

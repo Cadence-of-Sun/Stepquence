@@ -557,6 +557,157 @@ button {
   text-align: end;
 }
 
+/* Selecting sequences to share */
+
+.select-toggle {
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  border: 2px solid var(--color-muted);
+  border-radius: 0.75rem;
+  background: none;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sequence-card.is-selected {
+  border: 2px solid var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.select-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid var(--color-muted);
+  border-radius: 50%;
+}
+
+.select-mark.is-on {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font-size: 1rem;
+}
+
+.selection-bar {
+  position: fixed;
+  left: 50%;
+  bottom: max(var(--space-2), env(safe-area-inset-bottom));
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(calc(100% - 2rem), 36rem);
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--color-text);
+  color: var(--color-bg);
+  transform: translateX(-50%);
+  animation: fade-in 200ms ease-out;
+}
+
+.selection-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0 0.25rem;
+  font-size: 1rem;
+}
+
+.selection-count {
+  font-weight: 700;
+}
+
+.selection-extras {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+.selection-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.selection-move,
+.selection-action {
+  min-height: 2.75rem;
+  border-radius: 0.75rem;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.selection-move {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.5rem;
+  border: 2px solid color-mix(in srgb, var(--color-bg) 45%, transparent);
+  background: transparent;
+  color: var(--color-bg);
+}
+
+.selection-move option {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.selection-action {
+  padding: 0 var(--space-2);
+  border: 2px solid color-mix(in srgb, var(--color-bg) 45%, transparent);
+  background: none;
+  color: var(--color-bg);
+}
+
+.selection-action.is-primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.selection-move:disabled,
+.selection-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Room for the taller bar under the last card while selecting. */
+.home:has(.selection-bar) {
+  padding-bottom: 12rem;
+}
+
+/* Merge dialog */
+
+.merge-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 50dvh;
+  overflow-y: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.merge-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--color-frame);
+  border-radius: 0.75rem;
+}
+
+.merge-title {
+  font-weight: 700;
+}
+
+.merge-status {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
 /* Confirmation dialogs */
 
 .dialog-overlay {

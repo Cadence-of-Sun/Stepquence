@@ -36,3 +36,8 @@ npm run release
 
 Atkinson Hyperlegible Next is self-hosted in `resources/public/fonts/`
 (SIL Open Font License 1.1).
+
+## Browser checks
+
+`scripts/browser-check/` drives the app in headless Chromium (clicks,
+typing, drags, file picks, screenshots). See its README.

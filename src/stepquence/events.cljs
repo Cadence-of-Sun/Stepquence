@@ -9,6 +9,7 @@
    [stepquence.fx]
    [stepquence.run :as run]
    [stepquence.schema :as schema]
+   [stepquence.share :as share]
    [stepquence.storage :as storage]
    [day8.re-frame.tracing :refer-macros [fn-traced]]))
 
@@ -220,6 +221,33 @@
            (assoc-in [:ui :overview?] false))
    :fx [[:wake-lock/release]]})
 
+(def keep-consistent
+  "After any event: the screen must point at real data. If the open
+  sequence (or one waiting on it through a link) no longer exists, e.g.
+  an undo removed it while it was open, return to the list. Selected ids
+  that no longer exist drop out of the selection."
+  (re-frame/->interceptor
+   :id :keep-consistent
+   :after (fn [context]
+            (let [db (get-in context [:effects :db])]
+              (if-not db
+                context
+                (let [sequences (get-in db [:content :sequences])
+                      gone?     (fn [r] (and r (not (contains? sequences (:sequence-id r)))))
+                      stranded? (and (= :walkthrough (get-in db [:ui :screen]))
+                                     (or (gone? (:run db)) (some gone? (:run-stack db))))
+                      db        (cond-> db
+                                  (get-in db [:ui :selection])
+                                  (update-in [:ui :selection] #(into #{} (filter sequences) %)))]
+                  (if stranded?
+                    (let [{db' :db fx :fx} (leave-home db)]
+                      (-> context
+                          (assoc-in [:effects :db] db')
+                          (update-in [:effects :fx] (fnil into []) fx)))
+                    (assoc-in context [:effects :db] db))))))))
+
+(re-frame/reg-global-interceptor keep-consistent)
+
 (defn- pop-run
   "Return to the run waiting on the current (linked) one."
   [db]
@@ -335,10 +363,15 @@
  (fn-traced [db _]
    (assoc-in db [:ui :pin-entry] nil)))
 
-(defn- unlock [db]
+(defn- unlock
+  "Parent mode starts clean: nothing transient carries over from before."
+  [db]
   {:db (-> db
            (assoc-in [:ui :parent?] true)
-           (assoc-in [:ui :pin-entry] nil))
+           (assoc-in [:ui :pin-entry] nil)
+           (assoc-in [:ui :undo] nil)
+           (assoc-in [:ui :selection] nil)
+           (assoc-in [:ui :import] nil))
    :fx [[:parent/idle-lock {:timeout-ms (* 1000 (get-in db [:settings :parent-timeout-seconds]))
                             :on-idle    [::lock-parent]}]]})
 
@@ -369,7 +402,9 @@
          db          (-> db
                          (assoc-in [:ui :parent?] false)
                          (assoc-in [:ui :pin-entry] nil)
-                         (assoc-in [:ui :undo] nil))]
+                         (assoc-in [:ui :undo] nil)
+                         (assoc-in [:ui :selection] nil)
+                         (assoc-in [:ui :import] nil))]
      (-> (if previewing? (leave-home db) {:db db})
          (update :fx (fnil conj []) [:parent/idle-lock nil])))))
 
@@ -649,9 +684,10 @@
  [(re-frame/inject-cofx :now)]
  (fn-traced [{:keys [db now]} _]
    (when (parent? db)
-     {:fx [[:backup/export {:text     (backup/encode db now)
-                            :filename (backup/filename now)
-                            :on-done  [::backup-exported now]}]]})))
+     {:fx [[:file/export {:text     (backup/encode db now)
+                          :filename (backup/filename now)
+                          :title    "Stepquence backup"
+                          :on-done  [::backup-exported now]}]]})))
 
 (re-frame/reg-event-db
  ::backup-exported
@@ -660,13 +696,25 @@
 
 (re-frame/reg-event-db
  ::import-read
- ;; A chosen file's text: validated before anything changes.
+ ;; A chosen file's text, either a full backup (restore) or shared
+ ;; sequences (merge); validated before anything changes.
  (fn-traced [db [_ text]]
-   (let [{:keys [data error]} (backup/decode text)]
+   (let [kind  (share/file-kind text)
+         entry (case kind
+                 :backup    (let [{:keys [data error]} (backup/decode text)]
+                              (if error
+                                {:error error}
+                                {:kind :backup :data data :summary (backup/summary data)}))
+                 :sequences (let [{:keys [data error]} (share/decode text)]
+                              (if error
+                                {:error error}
+                                {:kind    :sequences
+                                 :data    data
+                                 :rows    (share/plan (:content db) data)
+                                 :choices {}}))
+                 {:error "That file isn't a Stepquence backup or shared sequences."})]
      (cond-> db
-       (parent? db) (assoc-in [:ui :import] (if error
-                                              {:error error}
-                                              {:data data :summary (backup/summary data)}))))))
+       (parent? db) (assoc-in [:ui :import] entry)))))
 
 (re-frame/reg-event-db
  ::import-cancel
@@ -696,3 +744,113 @@
  (fn-traced [db [_ snapshot]]
    (cond-> db
      (parent? db) (merge snapshot))))
+
+;; ---------------------------------------------------------------------------
+;; Sharing chosen sequences: select on the list, export; merge on import
+
+(re-frame/reg-event-db
+ ::start-selecting
+ (fn-traced [db _]
+   (cond-> db (parent? db) (assoc-in [:ui :selection] #{}))))
+
+(re-frame/reg-event-db
+ ::stop-selecting
+ (fn-traced [db _]
+   (assoc-in db [:ui :selection] nil)))
+
+(re-frame/reg-event-db
+ ::toggle-selected
+ (fn-traced [db [_ sequence-id]]
+   (update-in db [:ui :selection]
+              #(when % ((if (contains? % sequence-id) disj conj) % sequence-id)))))
+
+(re-frame/reg-event-fx
+ ::export-sequences
+ ;; Dispatched with dispatch-sync from the click, so the share sheet opens
+ ;; within the user gesture. Linked sequences come along (share/closure).
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ ids]]
+   (when (and (parent? db) (seq ids))
+     {:fx [[:file/export {:text     (share/encode (:content db) ids now)
+                          :filename (share/filename (:content db) ids now)
+                          :title    "Stepquence sequences"
+                          :on-done  [::stop-selecting]}]]})))
+
+(re-frame/reg-event-db
+ ::merge-choice
+ (fn-traced [db [_ sequence-id choice]]
+   (assoc-in db [:ui :import :choices sequence-id] choice)))
+
+(defn- merge-message [{:keys [added updated copied]}]
+  (let [part (fn [n word] (when (pos? n) (str n " " word)))]
+    (or (some->> [(part added "added") (part updated "updated") (part copied "copied")]
+                 (remove nil?) seq (interpose ", ") (apply str))
+        "Nothing imported")))
+
+(re-frame/reg-event-fx
+ ::merge-confirm
+ ;; Adds the shared sequences (and their items, collections, groups);
+ ;; can be undone for a few seconds.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} _]
+   (let [{:keys [kind data rows choices]} (get-in db [:ui :import])]
+     (when (and (parent? db) (= :sequences kind))
+       (let [result  (share/merge-into (:content db) data choices random-uuid)
+             ;; Existing sequences default to :update.
+             updated (into [] (keep (fn [{:keys [id exists?]}]
+                                      (when (and exists? (= :update (get choices id :update))) id)))
+                           rows)
+             before  (select-keys db [:content])]
+         (offer-undo {:db (-> db
+                              (assoc :content (:content result))
+                              ;; Updated sequences may have different steps.
+                              (update-in [:day :resume] #(apply dissoc % updated))
+                              (assoc-in [:ui :import] nil))}
+                     now (merge-message result) [::restore-snapshot before]))))))
+
+(re-frame/reg-event-fx
+ ::delete-selected
+ ;; All at once, one undo for all. Refused while a selected sequence is
+ ;; linked from outside the selection (the bar says which).
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} _]
+   (let [ids (get-in db [:ui :selection])]
+     (when (and (parent? db) (seq ids))
+       (let [[content undos] (edit/remove-sequences (:content db) ids)]
+         (when undos
+           (offer-undo {:db (-> db
+                                (assoc :content content)
+                                (update-in [:day :resume] #(apply dissoc % ids))
+                                (update-in [:day :done] #(apply disj % ids))
+                                (assoc-in [:ui :selection] nil))}
+                       now
+                       (if (= 1 (count ids)) "Sequence deleted" (str (count ids) " sequences deleted"))
+                       [::restore-sequences undos])))))))
+
+(re-frame/reg-event-db
+ ::restore-sequences
+ (fn-traced [db [_ undos]]
+   (edit-content db #(edit/restore-sequences % undos))))
+
+(re-frame/reg-event-db
+ ::move-selected
+ (fn-traced [db [_ group-id]]
+   (let [ids (get-in db [:ui :selection])]
+     (cond-> db
+       (and (parent? db) (seq ids))
+       (-> (update :content edit/move-sequences-to-group ids group-id)
+           (assoc-in [:ui :selection] nil))))))
+
+(re-frame/reg-event-fx
+ ::move-selected-to-new-group
+ ;; Creates "New group", moves the selection into it, and puts its name up
+ ;; for editing.
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} _]
+   (let [ids (get-in db [:ui :selection])]
+     (when (and (parent? db) (seq ids))
+       {:db (-> db
+                (update :content edit/add-group new-id "New group")
+                (update :content edit/move-sequences-to-group ids new-id)
+                (assoc-in [:ui :selection] nil))
+        :fx [[:focus {:selector (str "[data-group-name-for=\"" new-id "\"]") :select? true}]]}))))

@@ -170,18 +170,26 @@
         :when (and (= :link (:kind step)) (= sequence-id (:sequence-id step)))]
     {:title (:title s) :step (inc i)}))
 
-(defn remove-sequence
-  "Returns [content' undo], or [content nil] if it can't be removed."
+(defn- remove-sequence-unchecked
+  "Remove without checking links. [content' undo], or [content nil] if
+  there's no such sequence."
   [content sequence-id]
   (let [sequence (get-in content [:sequences sequence-id])
         gi       (group-index-of-sequence content sequence-id)]
-    (if (and sequence (empty? (links-to content sequence-id)))
+    (if sequence
       [(cond-> (update content :sequences dissoc sequence-id)
          gi (update-in [:groups gi :sequence-ids] remove-id sequence-id))
        {:sequence sequence
         :group-id (when gi (get-in content [:groups gi :id]))
         :index    (when gi (.indexOf (get-in content [:groups gi :sequence-ids]) sequence-id))}]
       [content nil])))
+
+(defn remove-sequence
+  "Returns [content' undo], or [content nil] if it can't be removed."
+  [content sequence-id]
+  (if (empty? (links-to content sequence-id))
+    (remove-sequence-unchecked content sequence-id)
+    [content nil]))
 
 (defn restore-sequence
   "Undo remove-sequence. Back into its group at its position, or into
@@ -295,3 +303,48 @@
   (if (can-add-step? sequence)
     (update sequence :steps conj {:id step-id :kind :link :sequence-id target-id})
     sequence))
+
+;; ---------------------------------------------------------------------------
+;; Several sequences at once (select mode)
+
+(defn delete-blockers
+  "Selected sequences that can't be deleted because a sequence outside the
+  selection links to them: [{:title … :linked-from [titles]}]."
+  [content ids]
+  (let [ids (set ids)]
+    (vec (for [id ids
+               :let [from (->> (:sequences content)
+                               vals
+                               (remove #(ids (:id %)))
+                               (filter #(some (fn [st] (and (= :link (:kind st)) (= id (:sequence-id st))))
+                                              (:steps %)))
+                               (map :title)
+                               sort
+                               vec)]
+               :when (seq from)]
+           {:title (get-in content [:sequences id :title]) :linked-from from}))))
+
+(defn remove-sequences
+  "Remove all of `ids` at once. Links among them don't block, since both
+  ends go. Returns [content' undos] (undos in removal order), or
+  [content nil] if any is linked from outside the selection."
+  [content ids]
+  (if (seq (delete-blockers content ids))
+    [content nil]
+    (reduce (fn [[c undos] id]
+              (let [[c' undo] (remove-sequence-unchecked c id)]
+                [c' (cond-> undos undo (conj undo))]))
+            [content []]
+            (sort-by str ids))))
+
+(defn restore-sequences
+  "Undo remove-sequences: restore in reverse order."
+  [content undos]
+  (reduce restore-sequence content (reverse undos)))
+
+(defn move-sequences-to-group
+  "Move several sequences to the end of a group, keeping their list order."
+  [content ids group-id]
+  (let [ids     (set ids)
+        ordered (filter ids (mapcat :sequence-ids (:groups content)))]
+    (reduce #(move-sequence-to-group %1 %2 group-id) content ordered)))

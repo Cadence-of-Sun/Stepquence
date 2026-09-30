@@ -320,6 +320,17 @@
           [:p.setting-note "Not scheduled on any day, so it won't appear on the child's list."])]
 
        [:div.setting
+        [:button.settings-button
+         {:type     "button"
+          ;; Synchronous, so sharing happens within the click.
+          :on-click #(re-frame/dispatch-sync [::events/export-sequences [id]])}
+         "Share this sequence"]
+        (when (seq @(re-frame/subscribe [::subs/link-closure-titles id]))
+          [:p.setting-note
+           (str "Also includes " (str/join ", " @(re-frame/subscribe [::subs/link-closure-titles id]))
+                ", which it links to.")])]
+
+       [:div.setting
         [:button.danger-button
          {:type     "button"
           :disabled (boolean (seq links-to))

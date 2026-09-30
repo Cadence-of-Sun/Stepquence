@@ -120,20 +120,64 @@
                  (str "Last backed up " days " days ago"))
        :stale? (>= days 14)})))
 
+(defn- merge-body
+  "Shared sequences: new ones are added; for each already here, choose
+  Update mine (replace in place, keeping its group and schedule here) or
+  Keep both (a copy)."
+  [{:keys [rows choices data]} cancel]
+  [:<>
+   [:h2#import-title.dialog-title "Import sequences?"]
+   [:p (str "From " (format-date (:exported-at data)) ".")]
+   [:ul.merge-list
+    (for [{:keys [id title exists? local-title]} rows
+          :let [choice (get choices id :update)]]
+      ^{:key (str id)}
+      [:li.merge-row
+       [:span.merge-title title]
+       (if-not exists?
+         [:span.merge-status "New"]
+         [:<>
+          [:span.merge-status
+           (if (= title local-title)
+             "Already here"
+             (str "Already here as \"" local-title "\""))]
+          [:span.chips {:role "group" :aria-label (str "What to do with " title)}
+           [:button.chip {:type         "button"
+                          :aria-pressed (= :update choice)
+                          :on-click     #(re-frame/dispatch [::events/merge-choice id :update])}
+            "Update mine"]
+           [:button.chip {:type         "button"
+                          :aria-pressed (= :copy choice)
+                          :on-click     #(re-frame/dispatch [::events/merge-choice id :copy])}
+            "Keep both"]]])])]
+   [:div.dialog-actions
+    [:button.dialog-button {:type "button" :on-click cancel} "Cancel"]
+    [:button.dialog-button.is-primary
+     {:type     "button"
+      :on-click #(re-frame/dispatch [::events/merge-confirm])}
+     "Import"]]])
+
 (defn import-dialog
-  "Confirm a full restore, or explain why the file can't be used."
+  "Confirm a full restore or a merge of shared sequences, or explain why
+  the file can't be used."
   []
-  (when-let [{:keys [error summary]} @(re-frame/subscribe [::subs/import])]
+  (when-let [{:keys [kind error summary] :as entry} @(re-frame/subscribe [::subs/import])]
     (let [current (count (:sequences @(re-frame/subscribe [::subs/content])))
           cancel  #(re-frame/dispatch [::events/import-cancel])]
       [:div.dialog-overlay
        [:div.dialog {:role "alertdialog" :aria-modal true :aria-labelledby "import-title"}
-        (if error
+        (cond
+          error
           [:<>
            [:h2#import-title.dialog-title "Can't use that file"]
            [:p error]
            [:div.dialog-actions
             [:button.dialog-button.is-primary {:type "button" :on-click cancel} "OK"]]]
+
+          (= :sequences kind)
+          [merge-body entry cancel]
+
+          :else
           (let [{:keys [sequences groups exported-at]} summary]
             [:<>
              [:h2#import-title.dialog-title "Restore this backup?"]
@@ -151,8 +195,10 @@
                "Replace everything"]]]))]])))
 
 (defn- import-button
-  "A button that opens the file picker (the input itself stays hidden)."
-  []
+  "A button that opens the file picker (the input itself stays hidden).
+  `on-chosen` runs once a file is picked (the popover closes: the dialog
+  that follows takes over)."
+  [on-chosen]
   (r/with-let [input (atom nil)]
     [:<>
      [:input.visually-hidden
@@ -164,6 +210,7 @@
        :on-change   (fn [e]
                       (let [el (.-target e)]
                         (when-let [file (aget (.-files el) 0)]
+                          (on-chosen)
                           (-> (.text file)
                               (.then #(re-frame/dispatch [::events/import-read %]))))
                         ;; So choosing the same file again still fires.
@@ -228,7 +275,7 @@
                   ;; user gesture).
                   :on-click #(re-frame/dispatch-sync [::events/export-backup])}
                  "Export backup"]
-                [import-button]]]
+                [import-button #(reset! open? false)]]]
               (when version
                 [:p.settings-version version])])]))})))
 

@@ -4,7 +4,8 @@
    [stepquence.day :as day]
    [stepquence.edit :as edit]
    [stepquence.run :as run]
-   [stepquence.schema :as schema]))
+   [stepquence.schema :as schema]
+   [stepquence.share :as share]))
 
 (re-frame/reg-sub
  ::content
@@ -339,6 +340,48 @@
  :<- [::run-sequence]
  (fn [sequence]
    (edit/can-delete-step? sequence)))
+
+(re-frame/reg-sub
+ ::selection
+ (fn [db]
+   (get-in db [:ui :selection])))
+
+(re-frame/reg-sub
+ ::selection-extras
+ ;; Sequences that will come along because a selected one links to them.
+ :<- [::content]
+ :<- [::selection]
+ (fn [[content selection]]
+   (when (seq selection)
+     (->> (remove selection (share/closure content selection))
+          (keep #(get-in content [:sequences % :title]))
+          sort
+          vec))))
+
+(re-frame/reg-sub
+ ::selection-blockers
+ ;; Selected sequences linked from outside the selection (can't delete).
+ :<- [::content]
+ :<- [::selection]
+ (fn [[content selection]]
+   (when (seq selection)
+     (edit/delete-blockers content selection))))
+
+(re-frame/reg-sub
+ ::group-options
+ :<- [::content]
+ (fn [content]
+   (mapv #(select-keys % [:id :name]) (:groups content))))
+
+(re-frame/reg-sub
+ ::link-closure-titles
+ ;; Titles of the sequences that sharing `id` would bring along.
+ :<- [::content]
+ (fn [content [_ id]]
+   (->> (disj (share/closure content [id]) id)
+        (keep #(get-in content [:sequences % :title]))
+        sort
+        vec)))
 
 (re-frame/reg-sub
  ::app-version

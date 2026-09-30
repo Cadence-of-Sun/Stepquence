@@ -116,3 +116,19 @@
   (testing "deeper loops too: c -> b -> a, so :a can't link to :c either"
     (let [content (update-in content [:sequences :c :steps] conj {:id :c2 :kind :link :sequence-id :b})]
       (is (= [] (mapv :id (edit/linkable content :a)))))))
+
+(deftest several-sequences
+  ;; In `content`, :b links to :a.
+  (testing "a sequence linked from outside the selection blocks deleting"
+    (is (= [{:title "A" :linked-from ["B"]}] (edit/delete-blockers content [:a :c])))
+    (is (= [content nil] (edit/remove-sequences content [:a :c]))))
+  (testing "linker and linked selected together can go"
+    (let [[after undos] (edit/remove-sequences content [:a :b])]
+      (is (= [:c] (keys (:sequences after))))
+      (is (= 2 (count undos)))
+      (is (= content (edit/restore-sequences after undos)) "undo puts them back exactly")))
+  (is (= [[:g1 [:b]] [:g2 [:c :a]] [ungrouped []]]
+         (group-ids (edit/move-sequences-to-group content [:a] :g2))))
+  (is (= [[:g1 []] [:g2 []] [ungrouped [:a :b :c]]]
+         (group-ids (edit/move-sequences-to-group content [:c :a :b] ungrouped)))
+      "list order is kept"))
