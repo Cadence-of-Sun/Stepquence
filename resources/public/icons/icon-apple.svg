@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- iOS rounds the corners itself and needs a full square (no transparency). -->
+  <rect width="512" height="512" fill="#f6f4ef"/>
+  <circle cx="256" cy="256" r="178" fill="#2e8b57"/>
+  <path d="M169 262l62 60 114-124" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

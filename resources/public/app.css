@@ -550,6 +550,11 @@ button {
   font-weight: 700;
 }
 
+.settings-hint {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
 .settings-version {
   color: var(--color-text-muted);
   font-size: 0.8rem;

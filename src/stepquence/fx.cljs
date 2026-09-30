@@ -179,6 +179,14 @@
      (if theme
        (set! (.. root -dataset -theme) (name theme))
        (.removeAttribute root "data-theme")))
+   ;; Browser chrome color: the chosen theme's background, or back to the
+   ;; per-system defaults (each meta tag has its own media query).
+   (doseq [m (array-seq (.querySelectorAll js/document "meta[name=\"theme-color\"]"))]
+     (set! (.-content m)
+           (case theme
+             :dark  "#17181b"
+             :light "#f6f4ef"
+             (if (= "(prefers-color-scheme: dark)" (.getAttribute m "media")) "#17181b" "#f6f4ef"))))
    (when save?
      (try (.setItem js/localStorage theme-storage-key (name theme)) (catch :default _ nil)))))
 

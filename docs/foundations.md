@@ -219,6 +219,10 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 
 ## Platform and accessibility
 - Service worker caches the app shell for offline use.
+  - `scripts/publish.sh` (adapted from pwa-publish-template) builds `dist/` from a separate `:dist` build, stamps the version (`YYYY.MM.DD.N`) into `<meta name="app-version">`, and generates `sw.js` from `scripts/sw.template.js`: every published file precached (fonts included) under a cache named `stepquence-<version>`, served cache-first, with old versions cleaned up by prefix.
+  - The worker is registered only in release builds (not on the dev server). Paths in `index.html` are relative, so the app works from any folder of a static site.
+  - `manifest.json`: standalone, the app's background color, and icons. The icon is the green check that completes a sequence: a solid green circle with a white check on the warm background. There are SVG sources plus rendered PNGs: 192/512, a maskable 512 with the check inside the safe zone, a full-square Apple touch icon, and a 32px favicon.
+  - Settings shows "Install as an app" when a Chromium browser offers installation, or "Share, then Add to Home Screen" on iOS Safari (which has no prompt). The browser's toolbar color (`theme-color`) follows the theme.
 - Highly legible font (Atkinson Hyperlegible Next, self-hosted). Touch targets well above 48px. High contrast. Use `dvh` units.
 - Light and dark themes. The app follows the system (`prefers-color-scheme`, live) until the toggle is pressed; the toggle shows ☀ / ☾ with the active one highlighted, and each press switches and saves the choice. The choice is kept in `localStorage` (a device display preference) so an inline script can apply it before first paint.
 - Document for parents: iOS Guided Access and Android app pinning lock the device to the app (both work with browsers and installed PWAs).

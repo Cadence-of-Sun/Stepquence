@@ -5,6 +5,7 @@
    [re-frame.core :as re-frame]
    [reagent.core :as r]
    [stepquence.dismiss :as dismiss]
+   [stepquence.install :as install]
    [stepquence.events :as events]
    [stepquence.subs :as subs]
    [stepquence.views.icons :as icons]))
@@ -276,6 +277,16 @@
                   :on-click #(re-frame/dispatch-sync [::events/export-backup])}
                  "Export backup"]
                 [import-button #(reset! open? false)]]]
+              ;; Only when installing is possible here: Chromium's own prompt,
+              ;; or a hint on iOS Safari (no prompt exists there).
+              (cond
+                @install/install-event
+                [:button.settings-button.settings-install
+                 {:type "button" :on-click install/install!}
+                 "Install as an app"]
+
+                (and (install/ios-safari?) (not (install/standalone?)))
+                [:p.settings-hint "To install: Share, then Add to Home Screen."])
               (when version
                 [:p.settings-version version])])]))})))
 

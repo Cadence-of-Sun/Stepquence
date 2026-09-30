@@ -22,4 +22,7 @@ S=/tmp/stepquence-check STEPS="$(python3 my_steps.py)" node scripts/browser-chec
 
 Step kinds: `click` (button text or a selector), `clickfast`, `shot`,
 `eval`, `reload`, `type [selector, text]`, `key <name>`,
-`drag [selector, dy]`, `save [expr, path]`, `file [input-selector, path]`.
+`drag [selector, dy]`, `save [expr, path]`, `file [input-selector, path]`,
+`cdp [method, params]` (a raw DevTools command). Set `URL` to check another
+server, e.g. the published build: `python3 -m http.server -d dist 8392` and
+`URL=http://127.0.0.1:8392/`.

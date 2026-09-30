@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Stepquence: the green check that completes a sequence. -->
+  <rect width="512" height="512" rx="112" fill="#f6f4ef"/>
+  <circle cx="256" cy="256" r="184" fill="#2e8b57"/>
+  <path d="M166 262l64 62 118-128" fill="none" stroke="#ffffff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

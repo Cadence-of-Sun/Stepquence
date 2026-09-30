@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full bleed; the check stays inside the maskable safe zone (radius 40%). -->
+  <rect width="512" height="512" fill="#f6f4ef"/>
+  <circle cx="256" cy="256" r="150" fill="#2e8b57"/>
+  <path d="M183 261l52 50 96-104" fill="none" stroke="#ffffff" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

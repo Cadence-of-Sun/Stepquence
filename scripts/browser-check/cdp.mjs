@@ -1,7 +1,8 @@
 // Drive headless Chromium over CDP. Usage: S=<dir> STEPS='[[kind,arg],...]' node cdp.mjs <w> <h> <prefix>
 // kinds: click (button text or selector), clickfast, shot, eval, reload,
 //        type [selector, text], key <name>, drag [selector, dy],
-//        save [expr, path], file [inputSelector, path]
+//        save [expr, path], file [inputSelector, path], cdp [method, params]
+// URL (env) overrides the default http://127.0.0.1:8391/.
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 const [w, h, prefix] = process.argv.slice(2);
@@ -16,7 +17,7 @@ const send = (method, params = {}) => new Promise(r => { const i = ++id; pending
 const evalJs = async expr => (await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
 await send('Runtime.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: 'http://127.0.0.1:8391/' });
+await send('Page.navigate', { url: process.env.URL || 'http://127.0.0.1:8391/' });
 await sleep(3000);
 const find = sel => `([...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(sel)}) || document.querySelector(${JSON.stringify(sel)}))`;
 const shot = async name => { await evalJs("document.getElementById('--re-frame-10x--')?.remove()"); const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${process.env.S}/shots/${prefix}-${name}.png`, Buffer.from(r.result.data, 'base64')); };
@@ -31,6 +32,7 @@ for (const [kind, arg] of JSON.parse(process.env.STEPS)) {
   else if (kind === 'drag') { const [sel, dy] = arg; const [x, y] = await evalJs(`(() => { const b = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()`); await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 }); for (let i = 1; i <= 12; i++) { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: y + dy * i / 12, button: 'left', buttons: 1 }); await sleep(30); } await sleep(200); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: y + dy, button: 'left', buttons: 0, clickCount: 1 }); await sleep(400); }
   else if (kind === 'save') { const [expr, path] = arg; writeFileSync(path, String(await evalJs(expr))); console.log('saved', path); }
   else if (kind === 'file') { const [sel, path] = arg; const doc = await send('DOM.getDocument', { depth: -1 }); const q = await send('DOM.querySelector', { nodeId: doc.result.root.nodeId, selector: sel }); await send('DOM.setFileInputFiles', { files: [path], nodeId: q.result.nodeId }); await sleep(900); }
+  else if (kind === 'cdp') { const [method, params] = arg; console.log(method, '=>', JSON.stringify((await send(method, params || {})).result).slice(0, 400)); }
   else if (kind === 'eval') console.log(arg.length > 80 ? arg.slice(0, 77) + '...' : arg, '=>', JSON.stringify(await evalJs(arg)));
 }
 ws.close(); chrome.kill();

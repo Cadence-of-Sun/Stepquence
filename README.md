@@ -26,11 +26,18 @@ every event. Violations are logged to the browser console.
 - `src/stepquence/seed.cljs`: sample content, used until editing exists
 - `src/stepquence/{events,subs,views}.cljs`: re-frame wiring
 
-## Release
+## Publishing
 
 ```sh
-npm run release
+npm run publish        # or: scripts/publish.sh [target-folder]
 ```
+
+Builds the installable, offline-capable app into `dist/` (a separate `:dist`
+build, so it's safe while `watch` runs), stamps a version like
+`2026.09.29.1` into the page (shown in parent mode's Settings), and generates
+the service worker that caches everything for offline use. Adapted from
+`pwa-publish-template`. Try it with `python3 -m http.server -d dist 8000`.
+Icons are drawn as SVG in `resources/public/icons/` and rendered to PNG.
 
 ## Fonts
 
