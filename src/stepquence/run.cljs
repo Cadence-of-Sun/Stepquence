@@ -72,16 +72,31 @@
     :steps        (< (:index run) (:done-count run))
     false))
 
+(defn waiting-for-timer?
+  "An opt-in timer step whose timer hasn't finished yet this run. (Never
+  on a revisited step: it was completed already.)"
+  [run step]
+  (and (:timer-required? step)
+       (:timer-seconds step)
+       (>= (:index run) (:done-count run))
+       (not (contains? (:timers-done run) (:id step)))))
+
+(defn timer-finished
+  "Remember that `step-id`'s timer has finished once this run."
+  [run step-id]
+  (update run :timers-done (fnil conj #{}) step-id))
+
 (defn can-advance?
   "Whether the primary button is enabled."
   [run sequence content]
   (case (:phase run)
     :requirements (every? (:checked run) (map :id (requirement-items content sequence)))
     :steps        (let [step (current-step run sequence)]
-                    (or (not= :choice (:kind step))
-                        (contains? (:choices run) (:id step))
-                        ;; A choice with no options must not become a dead end.
-                        (empty? (choice-options content step))))
+                    (and (or (not= :choice (:kind step))
+                             (contains? (:choices run) (:id step))
+                             ;; A choice with no options must not become a dead end.
+                             (empty? (choice-options content step)))
+                         (not (waiting-for-timer? run step))))
     :finished     true
     false))
 

@@ -1095,6 +1095,139 @@ button {
   font-size: 1rem;
 }
 
+/* Step timer: a ring that empties; green with a check at zero. */
+.step-timer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  /* Balances the reset button's width, so the ring stays centered. */
+  padding-left: 2.75rem;
+}
+
+.timer-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(4.5rem, 12dvh, 6rem);
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+}
+
+.timer-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg); /* empties from the top, clockwise */
+}
+
+.timer-track {
+  fill: none;
+  stroke: var(--color-frame);
+  stroke-width: 8;
+}
+
+.timer-fill {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 250ms linear, stroke 300ms;
+}
+
+.is-idle .timer-fill { stroke: var(--color-muted); }
+.is-paused .timer-fill { stroke: var(--color-text-muted); }
+.is-done .timer-fill { stroke: var(--color-done); }
+
+.timer-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.timer-center .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-accent);
+}
+
+.timer-time {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-paused {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.is-done .timer-center {
+  color: var(--color-done);
+  font-size: 2rem;
+}
+
+/* One gentle pulse at zero (none with reduced motion, see below). */
+.is-done .timer-ring {
+  animation: timer-done 900ms ease-out;
+}
+
+@keyframes timer-done {
+  40% { transform: scale(1.08); }
+}
+
+.timer-reset {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 2px solid var(--color-muted);
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-muted);
+}
+
+.timer-reset .icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+/* Editor: a step's timer length */
+.timer-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.timer-select {
+  flex-wrap: wrap;
+}
+
+.timer-required {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.timer-select select {
+  min-height: 2.25rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--color-muted);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
 /* Confirmation dialogs */
 
 .dialog-overlay {
@@ -2435,6 +2568,7 @@ button {
   .indicator-shape.go-back::before,
   .finished-mark-circle,
   .finished-mark-check,
+  .is-done .timer-ring,
   .indicator-shape.go-complete {
     animation: none;
   }

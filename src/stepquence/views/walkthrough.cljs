@@ -20,6 +20,7 @@
    [stepquence.views.editor :as editor]
    [stepquence.views.icons :as icons]
    [stepquence.views.picture :as picture]
+   [stepquence.views.timer :as timer]
    [stepquence.views.progress :as progress]))
 
 (defn- view-toggle [overview?]
@@ -158,7 +159,7 @@
              [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "thing-thumb"}])]])])))
 
 (defn- step-card []
-  (let [{:keys [kind title description image-id image-fit image-position] :as step}
+  (let [{:keys [id kind title description image-id image-fit image-position timer-seconds] :as step}
         @(re-frame/subscribe [::subs/current-step])]
     ;; The picture (4:3 frame) above the title when the step has one; the
     ;; image-less layout (large centered title, description below) is the
@@ -180,7 +181,10 @@
      (case kind
        :choice [choice-options step]
        :link   [progress/mini-dots @(re-frame/subscribe [::subs/link-steps])]
-       nil)]))
+       nil)
+     ;; Keyed by step, so each step's timer starts idle.
+     (when (and (= :task kind) timer-seconds)
+       ^{:key (str id)} [timer/step-timer id timer-seconds])]))
 
 (defn- finished-card []
   [:<>

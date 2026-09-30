@@ -296,6 +296,13 @@
            (when @open?
              [:div#settings-body.settings-body {:role "group" :aria-label "Settings"}
               [:div.settings-section
+               [:span.settings-label "Sound"]
+               [:label.settings-field
+                [:span "Chime when a timer ends"]
+                [:input {:type      "checkbox"
+                         :checked   (boolean @(re-frame/subscribe [::subs/sound?]))
+                         :on-change #(re-frame/dispatch [::events/toggle-sound])}]]]
+              [:div.settings-section
                [:span.settings-label "Backup"]
                [:p.backup-status {:class (when stale? "is-stale")} text]
                [:div.settings-actions

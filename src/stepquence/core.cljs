@@ -38,6 +38,9 @@
 (defn init []
   (re-frame/dispatch-sync [::events/initialize-db])
   (.addEventListener js/document "visibilitychange" on-visibility-change)
+  ;; Reloading or closing doesn't always report "hidden" first; pagehide
+  ;; always fires, so a pending save is never lost.
+  (.addEventListener js/window "pagehide" #(re-frame/dispatch-sync [::events/app-hidden]))
   (fx/install-activity-listeners!)
   (register-service-worker)
   (install/listen!)

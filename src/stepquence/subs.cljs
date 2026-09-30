@@ -205,7 +205,8 @@
       :enabled? (run/can-advance? r sequence content)
       :gated?   (and (#{:ready :done} action)
                      (or (= :requirements (:phase r))
-                         (= :choice (:kind step))))})))
+                         (= :choice (:kind step))
+                         (:timer-required? step)))})))
 
 (re-frame/reg-sub
  ::can-go-back?
@@ -302,6 +303,8 @@
                                  (run/step-title content step))
               :description     (:description step)
               :image-id        (:image-id step)
+              :timer-seconds   (:timer-seconds step)
+              :timer-required? (:timer-required? step)
               :detail          (when (= :choice kind)
                                  (get-in content [:items (get-in r [:choices id]) :title]))
               ;; For the editor:
@@ -482,6 +485,16 @@
  ::export
  (fn [db]
    (get-in db [:ui :export])))
+
+(re-frame/reg-sub
+ ::timer
+ (fn [db]
+   (get-in db [:ui :timer])))
+
+(re-frame/reg-sub
+ ::sound?
+ (fn [db]
+   (get-in db [:settings :sound?])))
 
 (re-frame/reg-sub
  ::app-version

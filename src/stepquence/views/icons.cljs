@@ -175,3 +175,14 @@
               :stroke-width 2 :stroke-linecap "round" :stroke-linejoin "round"}
    [:path {:d "M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-6.3 6.3a1.5 1.5 0 0 1-2.1 0z"}]
    [:circle {:cx 8.5 :cy 8.5 :r 1.6}]])
+
+(defn play []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true}
+   [:path {:d "M8 5.5v13l11-6.5z" :fill "currentColor" :stroke "currentColor"
+           :stroke-width 1.5 :stroke-linejoin "round"}]])
+
+(defn reset []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true :fill "none" :stroke "currentColor"
+              :stroke-width 2.2 :stroke-linecap "round" :stroke-linejoin "round"}
+   [:path {:d "M4.5 12a7.5 7.5 0 1 0 2.2-5.3"}]
+   [:path {:d "M4 4.5v4.2h4.2"}]])

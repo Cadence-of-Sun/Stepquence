@@ -89,7 +89,9 @@
     ;; Frame defaults to :contain; :cover allows a per-step crop focus.
     [:image-fit {:optional true} [:enum :contain :cover]]
     [:image-position {:optional true} :string]
-    [:timer-seconds {:optional true} pos-int?]]))
+    [:timer-seconds {:optional true} pos-int?]
+    ;; Opt-in: Done waits until the timer has finished once.
+    [:timer-required? {:optional true} :boolean]]))
 
 (def ChoiceStep
   (mu/merge
@@ -197,7 +199,9 @@
    [:ready? :boolean]
    [:checked [:set :uuid]]
    ;; choice step id -> chosen item id
-   [:choices [:map-of :uuid :uuid]]])
+   [:choices [:map-of :uuid :uuid]]
+   ;; Steps whose timer has finished at least once during this run.
+   [:timers-done {:optional true} [:set :uuid]]])
 
 ;; ---------------------------------------------------------------------------
 ;; Ephemeral (never persisted). Left open: timers, object-URL cache and
@@ -243,6 +247,8 @@
    ;; The picture dialog: {:target {:step-id …}|{:sequence-id …} :busy? …
    ;; :error …} while open.
    [:picture-editor {:optional true} [:maybe :map]]
+   ;; The current step's timer (see stepquence.timer).
+   [:timer {:optional true} [:maybe :map]]
    ;; The list editor (checklist or a choice step's list): {:target …}.
    [:list-editor {:optional true} [:maybe :map]]
    ;; Pictures screen: files still being added, and the last failure.

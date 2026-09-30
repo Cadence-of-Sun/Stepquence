@@ -361,6 +361,18 @@
                     (assoc :image-id image-id :image-fit :contain)
                     (dissoc :image-position))))
 
+(defn set-step-timer
+  "A timer of `seconds` on a task step, or none (nil)."
+  [sequence step-id seconds]
+  (update-step sequence step-id #(if (and seconds (pos? seconds))
+                                   (assoc % :timer-seconds seconds)
+                                   (dissoc % :timer-seconds :timer-required?))))
+
+(defn set-step-timer-required
+  "Whether Done waits for the step's timer to finish once."
+  [sequence step-id required?]
+  (update-step sequence step-id #(if required? (assoc % :timer-required? true) (dissoc % :timer-required?))))
+
 (defn clear-step-image [sequence step-id]
   (update-step sequence step-id #(dissoc % :image-id :image-fit :image-position)))
 

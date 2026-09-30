@@ -16,6 +16,7 @@
    [stepquence.views.fields :as fields]
    [stepquence.views.icons :as icons]
    [stepquence.views.picture :as picture]
+   [stepquence.timer :as timer]
    [stepquence.views.progress :as progress]))
 
 ;; ---------------------------------------------------------------------------
@@ -182,6 +183,30 @@
       :on-click #(re-frame/dispatch [::events/open-picture-editor {:step-id id}])}
      "+ Picture"]))
 
+(defn- timer-select
+  "A step's timer: none, or a length from the presets."
+  [{:keys [id title timer-seconds timer-required?]}]
+  (let [options (cond-> timer/presets
+                  (and timer-seconds (not (some #{timer-seconds} timer/presets)))
+                  (-> (conj timer-seconds) sort))]
+    [:div.timer-select
+     [:span "Timer"]
+     [:select {:value      (str (or timer-seconds ""))
+               :aria-label (str "Timer for \"" title "\"")
+               :on-change  #(let [v (.. % -target -value)]
+                              (re-frame/dispatch [::events/set-step-timer id (when (seq v) (js/parseInt v 10))]))}
+      [:option {:value ""} "None"]
+      (for [s options]
+        ^{:key s}
+        [:option {:value (str s)} (timer/label s)])]
+     ;; Opt-in: Done waits until the timer has finished once.
+     (when timer-seconds
+       [:label.timer-required
+        [:input {:type      "checkbox"
+                 :checked   (boolean timer-required?)
+                 :on-change #(re-frame/dispatch [::events/set-step-timer-required id (.. % -target -checked)])}]
+        "Finish before Done"])]))
+
 (defn- step-row [{:keys [id kind title description target current? done? collection-name] :as row}
                  {:keys [transform dragging? handle can-delete?]}]
   [:li.overview-row {:data-step-index target
@@ -217,7 +242,9 @@
         ^{:key (str id "|" description)}
         [description-field id description]
         (when (= :task kind)
-          [picture-slot row])])]
+          [:<>
+           [picture-slot row]
+           [timer-select row]])])]
     [:span.row-actions
      [:button.row-action
       {:type       "button"

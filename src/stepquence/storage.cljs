@@ -20,6 +20,13 @@
   when the current key is empty; the next save writes the current key."
   "stepwise.app-db")
 
+(def ^:private emergency-key
+  "localStorage key for a save that was still pending when the page went
+  away. IndexedDB writes are asynchronous and a closing page can abandon
+  them; localStorage is synchronous. Removed once IndexedDB has the data;
+  if present at startup, it's the newest data."
+  "stepquence.app-db.pending")
+
 (def save-delay-ms
   "Writes are debounced: a burst of events produces one write."
   500)
@@ -65,7 +72,11 @@
  ;; {:error …}. Unusable data is copied to a backup key before anything
  ;; can overwrite it.
  (fn [{:keys [on-loaded]}]
-   (-> (idb/get storage-key)
+   (-> (let [emergency (try (.getItem js/localStorage emergency-key) (catch :default _ nil))]
+         ;; A save cut short by closing the page is newer than IndexedDB.
+         (if emergency
+           (js/Promise.resolve emergency)
+           (idb/get storage-key)))
        (.then (fn [s] (if (nil? s) (idb/get legacy-storage-key) s)))
        (.then (fn [s]
                 (if (nil? s)
@@ -85,14 +96,21 @@
 
 (defn- write! [db]
   (-> (idb/set storage-key (encode db))
+      (.then #(try (.removeItem js/localStorage emergency-key) (catch :default _ nil)))
       (.catch #(js/console.error "Saving failed" %))))
 
-(defn- flush! []
-  (let [{:keys [timer db]} @pending]
-    (when timer
-      (js/clearTimeout timer)
-      (reset! pending {:timer nil :db nil})
-      (write! db))))
+(defn- flush!
+  "Write the pending save now. `leaving?`: the page is going away, so also
+  keep a synchronous copy in case the IndexedDB write is cut short."
+  ([] (flush! false))
+  ([leaving?]
+   (let [{:keys [timer db]} @pending]
+     (when timer
+       (js/clearTimeout timer)
+       (reset! pending {:timer nil :db nil})
+       (when leaving?
+         (try (.setItem js/localStorage emergency-key (encode db)) (catch :default _ nil)))
+       (write! db)))))
 
 (re-frame/reg-fx
  :storage/save
@@ -105,7 +123,7 @@
  :storage/flush
  ;; Write any pending save now (the app is being hidden or closed).
  (fn [_]
-   (flush!)))
+   (flush! true)))
 
 (re-frame/reg-fx
  :storage/save-copy

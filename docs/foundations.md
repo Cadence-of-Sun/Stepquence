@@ -148,9 +148,16 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Optional `:timer-seconds` per step.
 - Tap-to-start. Never auto-start: he looks at the picture first, then the text.
 - Reset (and possibly pause) controls.
-- The timer is for the action, not the step: it never auto-advances and never gates Done.
+- The timer is for the action, not the step: it never auto-advances, and by default never gates Done.
+  - Opt-in per step: "Finish before Done" (editor, shown when the step has a timer). Done then shows the "not yet" style until the timer has finished once during this run, then wakes like Ready. The run remembers it (`:timers-done`), so going back and forth or resetting afterwards doesn't re-lock it. Revisited (already done) steps are never locked.
 - A visual emptying ring/wedge; gentle visual cue at zero, with optional sound.
 - Timer state is ephemeral.
+- Built (`stepquence.timer`, `views.timer`, `stepquence.sound`):
+  - Step view: a ring below the step's text. The idle ring shows ▶ and the length; tap to start. While running it empties clockwise from the top, with m:ss in the middle; tap to pause ("Paused") or resume. ↺ resets, and is hidden (keeping its space) until the timer has been started. At zero: a full green ring with a check and one gentle pulse (none with reduced motion). It never advances the step or blocks Done.
+  - Time comes from the clock (start time plus banked running time), so it stays right in the background. Finishing is decided by a scheduled event tied to the current run segment, so a pause or reset makes an older check stale. The ring's display ticks 4 times a second while visible.
+  - The timer belongs to the step on screen: leaving the step clears it (the global consistency check).
+  - Editor: each task step has a "Timer" dropdown (None, 15 sec to 20 min).
+  - Sound: "Chime when a timer ends" in Settings, off by default. A soft two-note chime generated with Web Audio (no file, works offline); turning it on plays a sample. Audio is unlocked by the tap that starts a timer.
 
 ## Rewards
 - Parent setting: off / calm / celebratory. Also respect `prefers-reduced-motion`. No flashing. Sound off by default.
@@ -217,7 +224,8 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Avoid caching opaque responses (Chrome pads their quota cost heavily).
 - Health check (parent mode): test URL images with `new Image()` onload/onerror across the library, badge affected sequences, and record walkthrough-time failures for the parent.
 - app-db persists to IndexedDB as an EDN string (`pr-str` / `cljs.reader/read-string`) via `idb-keyval`, one key (`stepquence.app-db`) holding the persistent and per-day slices (`:content`, `:settings`, `:meta`, `:day`). The per-run and ephemeral slices are never written.
-  - A global interceptor schedules a save only when an event changes a persisted slice. Writes are debounced (500ms) and flushed immediately when the app is hidden.
+  - A global interceptor schedules a save only when an event changes a persisted slice. Writes are debounced (500ms) and flushed immediately when the app is hidden or the page goes away (`visibilitychange` and `pagehide`).
+  - A closing page can abandon an asynchronous IndexedDB write. So when a flush happens as the page goes away, the data is also written synchronously to `localStorage` (`stepquence.app-db.pending`, app data only; pictures live separately). That copy is removed once IndexedDB has the data. If it's still there at startup, it holds the newest data and is loaded instead.
   - Saving is off until storage has loaded, so defaults can never overwrite stored data.
   - Stored data that is unreadable or fails the schema is copied to a backup key (`stepquence.app-db.unusable-<ms>`) before the app starts fresh. It is never silently discarded.
   - Loaded data passes through `storage/migrate` (keyed on `:meta :schema-version`) before validation.

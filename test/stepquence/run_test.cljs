@@ -92,3 +92,16 @@
     (testing "a link to a missing sequence is a plain step"
       (let [content (update content :sequences dissoc (:id teeth))]
         (is (= :done (run/primary-action r bedtime content #{(:id bedtime)})))))))
+
+(deftest finish-the-timer-first
+  (let [sq   {:id :s :requirements []
+              :steps [{:id :t1 :kind :task :title "Brush" :timer-seconds 60 :timer-required? true}
+                      {:id :t2 :kind :task :title "Rinse" :timer-seconds 60}]}
+        r    (run/new-run sq nil)]
+    (is (not (run/can-advance? r sq content)) "Done waits for the timer")
+    (is (run/can-advance? (run/timer-finished r :t1) sq content) "once finished, Done works")
+    (testing "a timer that isn't required never blocks"
+      (is (run/can-advance? (run/advance (run/timer-finished r :t1) sq) sq content)))
+    (testing "a revisited step isn't locked"
+      (let [back (-> r (run/timer-finished :t1) (run/advance sq) (run/back sq))]
+        (is (run/can-advance? (assoc back :timers-done #{}) sq content))))))

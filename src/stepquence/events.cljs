@@ -12,6 +12,8 @@
    [stepquence.schema :as schema]
    [stepquence.share :as share]
    [stepquence.storage :as storage]
+   [stepquence.sound]
+   [stepquence.timer :as timer]
    [stepquence.transfer]
    [day8.re-frame.tracing :refer-macros [fn-traced]]))
 
@@ -238,9 +240,16 @@
                       gone?     (fn [r] (and r (not (contains? sequences (:sequence-id r)))))
                       stranded? (and (= :walkthrough (get-in db [:ui :screen]))
                                      (or (gone? (:run db)) (some gone? (:run-stack db))))
+                      run       (:run db)
+                      current   (when (= :steps (:phase run))
+                                  (get-in sequences [(:sequence-id run) :steps (:index run) :id]))
                       db        (cond-> db
                                   (get-in db [:ui :selection])
-                                  (update-in [:ui :selection] #(into #{} (filter sequences) %)))]
+                                  (update-in [:ui :selection] #(into #{} (filter sequences) %))
+                                  ;; A timer belongs to the step on screen; leaving it clears it.
+                                  (and (get-in db [:ui :timer])
+                                       (not= current (get-in db [:ui :timer :step-id])))
+                                  (assoc-in [:ui :timer] nil))]
                   (if stranded?
                     (let [{db' :db fx :fx} (leave-home db)]
                       (-> context
@@ -1239,3 +1248,63 @@
  ::restore-collection
  (fn-traced [db [_ undo]]
    (edit-content db #(edit/restore-collection % undo))))
+
+;; ---------------------------------------------------------------------------
+;; Step timers (see stepquence.timer). The child's taps; never automatic.
+
+(defn- check-later
+  "Schedule the finish check for a running timer."
+  [{:keys [status token] :as t} now]
+  (when (= :running status)
+    [:dispatch-later {:ms (timer/remaining t now) :dispatch [::timer-check token]}]))
+
+(re-frame/reg-event-fx
+ ::timer-toggle
+ ;; Start, pause or resume the current step's timer.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ step-id seconds]]
+   (let [t (timer/toggle (get-in db [:ui :timer]) step-id seconds now)]
+     {:db (assoc-in db [:ui :timer] t)
+      :fx (cond-> [(check-later t now)]
+            (get-in db [:settings :sound?]) (conj [:sound/unlock]))})))
+
+(re-frame/reg-event-fx
+ ::timer-check
+ ;; Only the run segment that scheduled it counts (a pause or reset since
+ ;; makes it stale).
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} [_ token]]
+   (let [t (get-in db [:ui :timer])]
+     (when (and t (= :running (:status t)) (= token (:token t)))
+       (if (pos? (timer/remaining t now))
+         {:fx [(check-later t now)]}
+         {:db (cond-> (assoc-in db [:ui :timer :status] :done)
+                ;; Remembered for the run: an opt-in "finish first" step
+                ;; can now be done (going back and forth won't re-lock it).
+                (:run db) (update :run run/timer-finished (:step-id t)))
+          :fx (when (get-in db [:settings :sound?]) [[:sound/chime]])})))))
+
+(re-frame/reg-event-db
+ ::timer-reset
+ (fn-traced [db _]
+   (assoc-in db [:ui :timer] nil)))
+
+(re-frame/reg-event-db
+ ::set-step-timer
+ ;; Parent mode: a length in seconds, or nil for no timer.
+ (fn-traced [db [_ step-id seconds]]
+   (edit-sequence db #(edit/set-step-timer % step-id seconds))))
+
+(re-frame/reg-event-db
+ ::set-step-timer-required
+ (fn-traced [db [_ step-id required?]]
+   (edit-sequence db #(edit/set-step-timer-required % step-id required?))))
+
+(re-frame/reg-event-fx
+ ::toggle-sound
+ (fn-traced [{:keys [db]} _]
+   (when (parent? db)
+     (let [on? (not (get-in db [:settings :sound?]))]
+       {:db (assoc-in db [:settings :sound?] on?)
+        ;; This tap unlocks audio, and a sample lets the parent hear it.
+        :fx (when on? [[:sound/chime]])}))))
