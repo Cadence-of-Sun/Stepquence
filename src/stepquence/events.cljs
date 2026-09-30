@@ -7,6 +7,7 @@
    [stepquence.db :as db]
    [stepquence.edit :as edit]
    [stepquence.fx]
+   [stepquence.images]
    [stepquence.run :as run]
    [stepquence.schema :as schema]
    [stepquence.share :as share]
@@ -404,7 +405,8 @@
                          (assoc-in [:ui :pin-entry] nil)
                          (assoc-in [:ui :undo] nil)
                          (assoc-in [:ui :selection] nil)
-                         (assoc-in [:ui :import] nil))]
+                         (assoc-in [:ui :import] nil)
+                         (assoc-in [:ui :picture-editor] nil))]
      (-> (if previewing? (leave-home db) {:db db})
          (update :fx (fnil conj []) [:parent/idle-lock nil])))))
 
@@ -854,3 +856,63 @@
                 (update :content edit/move-sequences-to-group ids new-id)
                 (assoc-in [:ui :selection] nil))
         :fx [[:focus {:selector (str "[data-group-name-for=\"" new-id "\"]") :select? true}]]}))))
+
+;; ---------------------------------------------------------------------------
+;; Step pictures (parent mode). The picture dialog edits one step of the
+;; previewed sequence; files are processed and stored by :images/import.
+
+(re-frame/reg-event-db
+ ::open-picture-editor
+ (fn-traced [db [_ step-id]]
+   (cond-> db (parent? db) (assoc-in [:ui :picture-editor] {:step-id step-id}))))
+
+(re-frame/reg-event-db
+ ::close-picture-editor
+ (fn-traced [db _]
+   (assoc-in db [:ui :picture-editor] nil)))
+
+(re-frame/reg-event-fx
+ ::picture-file-chosen
+ [(re-frame/inject-cofx :new-id)]
+ (fn-traced [{:keys [db new-id]} [_ step-id file]]
+   (when (parent? db)
+     {:db (assoc-in db [:ui :picture-editor] {:step-id step-id :busy? true})
+      :fx [[:images/import {:file     file
+                            :id       new-id
+                            :on-done  [::picture-imported step-id]
+                            :on-error [::picture-import-failed step-id]}]]})))
+
+(re-frame/reg-event-db
+ ::picture-imported
+ ;; Into the library, and onto the step.
+ (fn-traced [db [_ step-id image]]
+   (-> db
+       (edit-content #(assoc-in % [:images (:id image)] image))
+       (edit-sequence #(edit/set-step-image % step-id (:id image)))
+       (assoc-in [:ui :picture-editor] (when (get-in db [:ui :picture-editor]) {:step-id step-id})))))
+
+(re-frame/reg-event-db
+ ::picture-import-failed
+ (fn-traced [db [_ step-id message]]
+   (assoc-in db [:ui :picture-editor] {:step-id step-id :error message})))
+
+(re-frame/reg-event-db
+ ::use-library-image
+ (fn-traced [db [_ step-id image-id]]
+   (edit-sequence db #(edit/set-step-image % step-id image-id))))
+
+(re-frame/reg-event-db
+ ::remove-step-image
+ ;; The picture stays in the library for reuse.
+ (fn-traced [db [_ step-id]]
+   (edit-sequence db #(edit/clear-step-image % step-id))))
+
+(re-frame/reg-event-db
+ ::set-step-image-fit
+ (fn-traced [db [_ step-id fit]]
+   (edit-sequence db #(edit/set-step-image-fit % step-id fit))))
+
+(re-frame/reg-event-db
+ ::set-step-image-position
+ (fn-traced [db [_ step-id x y]]
+   (edit-sequence db #(edit/set-step-image-position % step-id x y))))

@@ -1,5 +1,6 @@
 (ns stepquence.subs
   (:require
+   [clojure.string :as str]
    [re-frame.core :as re-frame]
    [stepquence.day :as day]
    [stepquence.edit :as edit]
@@ -294,6 +295,7 @@
                                  "What you need"
                                  (run/step-title content step))
               :description     (:description step)
+              :image-id        (:image-id step)
               :detail          (when (= :choice kind)
                                  (get-in content [:items (get-in r [:choices id]) :title]))
               ;; For the editor:
@@ -357,6 +359,29 @@
           (keep #(get-in content [:sequences % :title]))
           sort
           vec))))
+
+(re-frame/reg-sub
+ ::picture-editor-state
+ (fn [db]
+   (get-in db [:ui :picture-editor])))
+
+(re-frame/reg-sub
+ ::picture-editor
+ ;; The open picture dialog, with its step (from the previewed sequence).
+ :<- [::picture-editor-state]
+ :<- [::run-sequence]
+ (fn [[state sequence]]
+   (when state
+     (assoc state :step (some #(when (= (:step-id state) (:id %)) %) (:steps sequence))))))
+
+(re-frame/reg-sub
+ ::image-library
+ ;; Every picture in the library, by name, with how many steps use it.
+ :<- [::content]
+ (fn [content]
+   (->> (vals (:images content))
+        (sort-by (comp str/lower-case :name))
+        (mapv #(assoc % :uses (edit/image-uses content (:id %)))))))
 
 (re-frame/reg-sub
  ::selection-blockers

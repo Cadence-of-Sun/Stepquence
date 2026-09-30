@@ -348,3 +348,39 @@
   (let [ids     (set ids)
         ordered (filter ids (mapcat :sequence-ids (:groups content)))]
     (reduce #(move-sequence-to-group %1 %2 group-id) content ordered)))
+
+;; ---------------------------------------------------------------------------
+;; Step pictures
+
+(defn set-step-image
+  "Point a task step at library picture `image-id`, framed to fit (the
+  whole picture shows) until the parent chooses fill."
+  [sequence step-id image-id]
+  (update-step sequence step-id
+               #(-> %
+                    (assoc :image-id image-id :image-fit :contain)
+                    (dissoc :image-position))))
+
+(defn clear-step-image [sequence step-id]
+  (update-step sequence step-id #(dissoc % :image-id :image-fit :image-position)))
+
+(defn set-step-image-fit
+  "`fit` is :contain (fit: whole picture) or :cover (fill: frame filled,
+  edges cropped around :image-position)."
+  [sequence step-id fit]
+  (update-step sequence step-id #(assoc % :image-fit fit)))
+
+(defn set-step-image-position
+  "Where a filled picture is centered, as percentages (0-100), e.g. the
+  point tapped on the preview."
+  [sequence step-id x y]
+  (let [pct #(str (js/Math.round (max 0 (min 100 %))) "%")]
+    (update-step sequence step-id #(assoc % :image-position (str (pct x) " " (pct y))))))
+
+(defn image-uses
+  "How many steps use picture `image-id`, across all sequences."
+  [content image-id]
+  (count (for [s (vals (:sequences content))
+               step (:steps s)
+               :when (= image-id (:image-id step))]
+           step)))

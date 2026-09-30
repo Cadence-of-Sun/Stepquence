@@ -713,6 +713,137 @@ button {
   font-size: 0.95rem;
 }
 
+/* Pictures */
+
+.picture {
+  display: block;
+  overflow: hidden;
+  background: var(--color-frame);
+}
+
+.picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The picture takes all the card's height the text doesn't need (the text
+   keeps its natural height), but never less than half of the content area,
+   so a long description can't shrink it to a stamp. The area is a size
+   container; the 4:3 frame fits inside it, bottom-aligned (next to its
+   title), and never wider than the card or 36rem. */
+.card-picture-area {
+  container-type: size;
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  min-height: 50cqh;
+}
+
+.step-picture {
+  width: min(100%, 36rem, calc(100cqh * 4 / 3));
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius);
+}
+
+.overview-thumb {
+  flex: none;
+  width: 3.5rem;
+  aspect-ratio: 4 / 3;
+  margin-left: auto;
+  border-radius: 0.5rem;
+}
+
+.overview-row-inner .overview-thumb + .overview-go {
+  margin-left: 0;
+}
+
+.picture-slot {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  border-radius: 0.5rem;
+  background: none;
+}
+
+.picture-slot-thumb {
+  width: 5rem;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.5rem;
+}
+
+.picture-dialog {
+  width: min(100%, 30rem);
+  max-height: 92dvh;
+  overflow-y: auto;
+}
+
+.picture-preview {
+  position: relative;
+}
+
+.picture-preview .step-picture {
+  width: 100%;
+}
+
+.picture-preview.is-focusable {
+  cursor: crosshair;
+}
+
+.focus-mark {
+  position: absolute;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.45);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.picture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.picture-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: var(--space-1);
+  max-height: 40dvh;
+  overflow-y: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.picture-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  text-align: start;
+}
+
+.picture-choice-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.5rem;
+}
+
+.picture-choice-name {
+  overflow: hidden;
+  font-size: 0.85rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Confirmation dialogs */
 
 .dialog-overlay {
@@ -1508,15 +1639,19 @@ button {
 
 /* Content grows upward from the primary button, which sits at a fixed
    distance above the footer and so never moves. */
+/* The primary button sits at the bottom of this area, which has the same
+   height on every step, so the button never moves; everything above it is
+   the card's. */
 .wt-main {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto min(8dvh, 5rem);
+  grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-height: 0;
 }
 
 .wt-content {
+  container-type: size;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1528,15 +1663,20 @@ button {
 
 /* margin-top:auto (not justify-content:flex-end) keeps overflowing
    content scrollable from its top. */
+/* The card fills the content area, its content bottom-aligned (just above
+   the button). min-height, not height: if content ever overflows, the card
+   grows and the area scrolls from its top. */
 .wt-content > .card {
-  margin-top: auto;
+  flex: none; /* never squeezed: overflow must scroll from the top, not spill off it */
+  min-height: 100%;
+  justify-content: flex-end;
 }
 
 .card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: clamp(0.75rem, 2.5dvh, 1.5rem);
   width: min(100%, 48rem);
   /* Vertical padding contains large glyphs that overflow their line box,
      which would otherwise make the content area scrollable. */
@@ -1567,7 +1707,9 @@ button {
 
 .card-description {
   max-width: 32ch;
-  font-size: 1.5rem;
+  /* Smaller on phones, so the picture keeps its presence. */
+  font-size: clamp(1.05rem, 4.2vw, 1.5rem);
+  line-height: 1.35;
   color: var(--color-text-muted);
   text-wrap: pretty;
 }

@@ -15,6 +15,7 @@
    [stepquence.subs :as subs]
    [stepquence.views.fields :as fields]
    [stepquence.views.icons :as icons]
+   [stepquence.views.picture :as picture]
    [stepquence.views.progress :as progress]))
 
 ;; ---------------------------------------------------------------------------
@@ -163,6 +164,20 @@
     [:span.row-actions
      [go-button row]]]])
 
+(defn- picture-slot
+  "The step's picture as a small thumbnail (tap to change), or \"+ Picture\"."
+  [{:keys [id title image-id]}]
+  (if image-id
+    [:button.picture-slot
+     {:type       "button"
+      :aria-label (str "Picture for \"" title "\"")
+      :on-click   #(re-frame/dispatch [::events/open-picture-editor id])}
+     [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "picture-slot-thumb"}]]
+    [:button.add-description
+     {:type     "button"
+      :on-click #(re-frame/dispatch [::events/open-picture-editor id])}
+     "+ Picture"]))
+
 (defn- step-row [{:keys [id kind title description target current? done? collection-name] :as row}
                  {:keys [transform dragging? handle can-delete?]}]
   [:li.overview-row {:data-step-index target
@@ -193,7 +208,9 @@
         (when (= :choice kind)
           [:span.overview-detail (str "Choice from " (or collection-name "a missing collection"))])
         ^{:key (str id "|" description)}
-        [description-field id description]])]
+        [description-field id description]
+        (when (= :task kind)
+          [picture-slot row])])]
     [:span.row-actions
      [:button.row-action
       {:type       "button"
@@ -344,3 +361,100 @@
                   " to this sequence. Remove "
                   (if one? "that step" "those steps")
                   " first to delete it."))])]])))
+
+;; ---------------------------------------------------------------------------
+;; Picture dialog: one step's picture
+
+(defn- photo-button
+  "Opens the file picker; on phones it offers the camera and the gallery."
+  [step-id label]
+  (r/with-let [input (atom nil)]
+    [:<>
+     [:input.visually-hidden
+      {:type        "file"
+       :accept      "image/*"
+       :aria-hidden true
+       :tab-index   -1
+       :ref         #(reset! input %)
+       :on-change   (fn [e]
+                      (let [el (.-target e)]
+                        (when-let [file (aget (.-files el) 0)]
+                          (re-frame/dispatch [::events/picture-file-chosen step-id file]))
+                        (set! (.-value el) "")))}]
+     [:button.dialog-button.is-primary
+      {:type "button" :on-click #(some-> @input .click)}
+      label]]))
+
+(defn- preview
+  "The picture as the step will show it. When filled, tapping sets the part
+  kept in the middle."
+  [{:keys [id title image-id image-fit image-position]}]
+  (let [cover? (= :cover image-fit)]
+    [:div.picture-preview
+     {:class    (when cover? "is-focusable")
+      :on-click (when cover?
+                  (fn [e]
+                    (let [r (.getBoundingClientRect (.-currentTarget e))]
+                      (re-frame/dispatch [::events/set-step-image-position id
+                                          (* 100 (/ (- (.-clientX e) (.-left r)) (.-width r)))
+                                          (* 100 (/ (- (.-clientY e) (.-top r)) (.-height r)))]))))}
+     [picture/picture {:image-id image-id :kind :full :fit image-fit :position image-position
+                       :alt title :class "step-picture"}]
+     (when cover?
+       (let [[x y] (str/split (or image-position "50% 50%") #" ")]
+         [:span.focus-mark {:style {:left x :top y}}]))]))
+
+(defn- library-grid [step-id current-id close!]
+  (let [images (remove #(= current-id (:id %)) @(re-frame/subscribe [::subs/image-library]))]
+    [:div.picture-library
+     (if (seq images)
+       [:ul.picture-library-grid
+        (for [{:keys [id name]} images]
+          ^{:key (str id)}
+          [:li
+           [:button.picture-choice
+            {:type     "button"
+             :on-click (fn []
+                         (close!)
+                         (re-frame/dispatch [::events/use-library-image step-id id]))}
+            [picture/picture {:image-id id :kind :thumb :fit :cover :alt "" :class "picture-choice-thumb"}]
+            [:span.picture-choice-name name]]])]
+       [:p.setting-note "No other pictures yet."])]))
+
+(defn picture-dialog []
+  (r/with-let [browsing? (r/atom false)]
+    (if-let [{:keys [step busy? error]} @(re-frame/subscribe [::subs/picture-editor])]
+      (let [{:keys [id title image-id image-fit]} step
+            close! #(re-frame/dispatch [::events/close-picture-editor])]
+        [:div.dialog-overlay
+         [:div.dialog.picture-dialog {:role "dialog" :aria-modal true :aria-labelledby "picture-title"}
+          [:h2#picture-title.dialog-title (str "Picture for \"" title "\"")]
+          (cond
+            busy?    [:p.setting-note "Adding the picture…"]
+            error    [:p.setting-note error]
+            image-id [preview step])
+          (when image-id
+            [:<>
+             [:div.chips {:role "group" :aria-label "Framing"}
+              [:button.chip {:type "button" :aria-pressed (not= :cover image-fit)
+                             :on-click #(re-frame/dispatch [::events/set-step-image-fit id :contain])}
+               "Fit"]
+              [:button.chip {:type "button" :aria-pressed (= :cover image-fit)
+                             :on-click #(re-frame/dispatch [::events/set-step-image-fit id :cover])}
+               "Fill"]]
+             [:p.setting-note (if (= :cover image-fit)
+                                "Fill crops the edges. Tap the picture to choose the part to keep in the middle."
+                                "Fit shows the whole picture.")]])
+          [:div.picture-actions
+           [photo-button id (if image-id "New photo" "Take or choose a photo")]
+           [:button.dialog-button
+            {:type "button" :aria-expanded @browsing? :on-click #(swap! browsing? not)}
+            "From the library"]
+           (when image-id
+             [:button.dialog-button
+              {:type "button" :on-click #(re-frame/dispatch [::events/remove-step-image id])}
+              "Remove picture"])]
+          (when @browsing?
+            [library-grid id image-id #(reset! browsing? false)])
+          [:div.dialog-actions
+           [:button.dialog-button {:type "button" :on-click #(do (reset! browsing? false) (close!))} "Done"]]]]))))

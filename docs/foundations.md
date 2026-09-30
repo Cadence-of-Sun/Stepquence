@@ -41,7 +41,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
         [ primary button ]                    <- fixed position
   ← Back      3 of 7 / progress dots      Next: <title>
   ```
-  - The card sits directly above the primary button and grows upward, so the button never moves between steps. Nothing else moves either: hidden controls use `visibility: hidden`, and the "Next:" hint has a fixed height (the Back button's) whether its title takes one line or two.
+  - The primary button sits at the bottom of the main area, which has the same height on every step, so it never moves. The card fills the space above it, its content bottom-aligned just above the button. (There used to be a spacer below the button; it was given to the content.) Nothing else moves either: hidden controls use `visibility: hidden`, and the "Next:" hint has a fixed height (the Back button's) whether its title takes one line or two.
 - Step content: `:title` (required), `:description` (optional), image (optional).
 - The image-less layout is a first-class design: large centered title, description below. It is also the fallback when an image fails to load. No generic placeholder icons.
 - Image frame:
@@ -181,6 +181,14 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - Ephemeral: parent mode, overview toggle, timer state, object-URL cache, image health results.
 
 ## Images and storage
+- Built (round 1: pictures on steps), in `stepquence.images`:
+  - Files live in their own IndexedDB store (`stepquence-images`), as `<id>/full` (about 1024px on the long edge) and `<id>/thumb` (256px). They're decoded with `createImageBitmap(file, {imageOrientation: "from-image"})`, so camera orientation is applied, and resized on a canvas. They're encoded as WebP (0.8), falling back to JPEG (0.82) when the browser returns anything else (Safari may not encode WebP).
+  - App data keeps only the library records (`:content :images`, `{:id :name :source :local :width :height}`); steps point at them with `:image-id`.
+  - Object URLs are created on first use and cached in a plain Reagent atom (handles, not data). A picture that can't be read is marked failed and renders nothing, so the step falls back to text only.
+  - Step view: the 4:3 frame above the title. Pictures get priority over text: the title and description keep their natural height, and the picture area takes all the rest, but never less than half the content area (a CSS size container). So a long description can't shrink the picture to a stamp; on a small phone with a very long description, the text scrolls instead. The description is smaller on phones (about 16.8px, and 24px on tablets). Fit (`contain`, the default) or Fill (`cover`, around a focus point).
+  - Editor: each task step's row shows its thumbnail (or "+ Picture") under the description. It opens a picture dialog with a preview, Fit/Fill, tap-to-set the focus point when filled, "Take or choose a photo" (one `accept="image/*"` picker; phones offer the camera and the gallery), "From the library" (reuse), and "Remove picture" (the picture stays in the library).
+  - Overview: a small thumbnail on rows whose step has a picture. Nothing on rows without one.
+- Round 2 (next): the library screen (usage counts, rename, delete, "Replace with…"), sequence card pictures, and pictures embedded in backups and shared files. Until then, backups and shared files carry the picture records but not the files, so on another device those steps show text only.
 - Image blobs live in IndexedDB, never in app-db. app-db holds only IDs.
 - On import, resize via canvas to ~1024px long edge, WebP/JPEG ~80%. Store a small thumbnail blob too, for the overview and pickers.
 - Display via `URL.createObjectURL`. Cache these URLs in ephemeral state and revoke unused ones.
@@ -246,6 +254,7 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Optional group times to highlight the current group
 
 ## Open questions
+- Title position on steps without a picture: it now sits just above the fixed Done button (content bottom-aligned), with the empty space above. The alternative is to center text-only steps vertically in the space, which puts the title at a different height than on picture steps. To be judged in real use.
 - Garden mechanics (petal per step vs. per sequence; completion ritual)
 - Max options shown in a choice step
 - Whether resume feels right in practice

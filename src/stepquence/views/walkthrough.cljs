@@ -15,9 +15,11 @@
   (:require
    [re-frame.core :as re-frame]
    [stepquence.events :as events]
+   [stepquence.images :as images]
    [stepquence.subs :as subs]
    [stepquence.views.editor :as editor]
    [stepquence.views.icons :as icons]
+   [stepquence.views.picture :as picture]
    [stepquence.views.progress :as progress]))
 
 (defn- view-toggle [overview?]
@@ -72,7 +74,7 @@
 
 (defn- overview-list []
   [:ol.overview
-   (for [{:keys [id title description detail current? done?] :as m} @(re-frame/subscribe [::subs/overview-rows])]
+   (for [{:keys [id title description detail current? done? image-id] :as m} @(re-frame/subscribe [::subs/overview-rows])]
      ^{:key (str id)}
      [:li.overview-row {:class [(when current? "is-current")
                                 (when done? "is-done")]}
@@ -96,6 +98,9 @@
         ;; Only the current step's description, if it has one.
         (when (and current? description)
           [:span.overview-description description])]
+       ;; A thumbnail only when the step has a picture (no placeholders).
+       (when image-id
+         [picture/picture {:image-id image-id :kind :thumb :fit :cover :alt "" :class "overview-thumb"}])
        (when current?
          [:span.overview-go [icons/arrow-right]])]])])
 
@@ -107,7 +112,8 @@
      [editor/heading]
      [:div.overview-scroll
       [editor/overview-editor]
-      [editor/sequence-settings]]]
+      [editor/sequence-settings]]
+     [editor/picture-dialog]]
     [:<>
      [sequence-heading :h1]
      [:div.overview-scroll
@@ -148,10 +154,22 @@
            [:span.choice-label title]]])])))
 
 (defn- step-card []
-  (let [{:keys [kind title description] :as step} @(re-frame/subscribe [::subs/current-step])]
-    ;; Image-less layout: large centered title, description below. The image
-    ;; frame slots in above the title once images exist.
+  (let [{:keys [kind title description image-id image-fit image-position] :as step}
+        @(re-frame/subscribe [::subs/current-step])]
+    ;; The picture (4:3 frame) above the title when the step has one; the
+    ;; image-less layout (large centered title, description below) is the
+    ;; same without it, and also what shows if the picture can't load.
     [:<>
+     ;; The picture area takes whatever height the text leaves. Only when
+     ;; the picture can be shown (a missing file means text only).
+     (when (and image-id (not (images/failed? (images/url image-id :full))))
+       [:div.card-picture-area
+        [picture/picture {:image-id image-id
+                          :kind     :full
+                          :fit      image-fit
+                          :position image-position
+                          :alt      title
+                          :class    "step-picture"}]])
      [:h1.card-title title]
      (when description
        [:p.card-description description])

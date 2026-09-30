@@ -233,6 +233,8 @@
    ;; shared sequences {:kind :sequences :data :rows :choices} awaiting
    ;; confirmation, or {:error …}.
    [:import {:optional true} [:maybe :map]]
+   ;; The picture dialog: {:step-id … :busy? … :error …} while open.
+   [:picture-editor {:optional true} [:maybe :map]]
    ;; Sequences chosen for sharing, while selecting on the list.
    [:selection {:optional true} [:maybe [:set :uuid]]]
    ;; PIN pad state while it is open.

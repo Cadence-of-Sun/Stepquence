@@ -132,3 +132,14 @@
   (is (= [[:g1 []] [:g2 []] [ungrouped [:a :b :c]]]
          (group-ids (edit/move-sequences-to-group content [:c :a :b] ungrouped)))
       "list order is kept"))
+
+(deftest step-pictures
+  (let [with (edit/set-step-image sq :s1 :img)]
+    (is (= {:image-id :img :image-fit :contain} (select-keys (get-in with [:steps 1]) [:image-id :image-fit :image-position])))
+    (is (= :cover (-> (edit/set-step-image-fit with :s1 :cover) :steps (get 1) :image-fit)))
+    (is (= "30% 100%" (-> (edit/set-step-image-position with :s1 29.6 140) :steps (get 1) :image-position))
+        "rounded, clamped")
+    (is (= (get-in sq [:steps 1]) (get-in (edit/clear-step-image with :s1) [:steps 1])))
+    (testing "a new picture starts fit, dropping an old focus point"
+      (let [focused (edit/set-step-image-position with :s1 10 10)]
+        (is (not (contains? (get-in (edit/set-step-image focused :s1 :img2) [:steps 1]) :image-position)))))))
