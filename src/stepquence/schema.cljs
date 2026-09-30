@@ -213,6 +213,8 @@
    ;; Storage has loaded and saving is on (false before load, or when
    ;; IndexedDB is unavailable).
    [:persist? :boolean]
+   ;; The published build's version (nil in development).
+   [:app-version {:optional true} [:maybe :string]]
    ;; Tracks prefers-color-scheme; used while settings :theme is nil.
    [:system-theme [:enum :light :dark]]
    ;; Which way the walkthrough card slides in (and the indicator points).
@@ -227,6 +229,9 @@
                                              [:message :string]
                                              [:restore [:vector :any]]
                                              [:token number?]]]]]
+   ;; A backup file being imported: {:data … :summary …} awaiting
+   ;; confirmation, or {:error …}.
+   [:import {:optional true} [:maybe :map]]
    ;; PIN pad state while it is open.
    [:pin-entry {:optional true} [:maybe PinEntry]]])
 

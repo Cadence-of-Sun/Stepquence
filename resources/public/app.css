@@ -460,6 +460,161 @@ button {
   height: 1.25rem;
 }
 
+/* Settings popover (gear in the parent banner). The same pattern as
+   brainboard's settings panel. */
+
+/* Anchored to the banner (not the gear, which isn't at the edge), so the
+   popover always opens fully on screen, under the banner's right side. */
+.settings-panel {
+  position: static;
+}
+
+.settings-toggle {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text);
+}
+
+.settings-toggle[aria-expanded="true"],
+.settings-toggle:hover {
+  background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+}
+
+.settings-toggle .icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.settings-body {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: var(--space-1);
+  z-index: 15;
+  display: grid;
+  gap: var(--space-2);
+  width: min(20rem, calc(100vw - 2rem));
+  padding: var(--space-2);
+  border: 2px solid var(--color-frame);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.25);
+  font-size: 1rem;
+}
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.settings-section {
+  display: grid;
+  gap: 0.4rem;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-frame);
+}
+
+.settings-label {
+  font-weight: 700;
+}
+
+.backup-status {
+  color: var(--color-text-muted);
+}
+
+.backup-status.is-stale {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.settings-button {
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  border: 2px solid var(--color-muted);
+  border-radius: 0.75rem;
+  background: none;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.settings-version {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* Confirmation dialogs */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  background: rgb(0 0 0 / 0.45);
+  animation: fade-in 150ms ease-out;
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(100%, 26rem);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: 1.05rem;
+}
+
+.dialog-title {
+  font-size: var(--text-heading);
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.dialog-button {
+  min-height: 3rem;
+  padding: 0 var(--space-2);
+  border: 2px solid var(--color-muted);
+  border-radius: 0.75rem;
+  background: none;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.dialog-button.is-primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.dialog-button.is-danger {
+  border-color: var(--color-danger);
+  background: var(--color-danger);
+  color: var(--color-surface);
+}
+
 /* The editor's "Sequence" section, below the steps */
 
 .sequence-settings {
@@ -845,6 +1000,7 @@ button {
 
 .parent-banner {
   grid-row: 1;
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-1);

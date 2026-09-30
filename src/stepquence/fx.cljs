@@ -10,6 +10,16 @@
    (assoc cofx :now (js/Date.now))))
 
 (re-frame/reg-cofx
+ :app-version
+ ;; The published build's version, from a <meta name="app-version"> the
+ ;; publish script stamps into the HTML. nil in development (no tag), and
+ ;; then not shown, rather than a placeholder.
+ (fn [cofx]
+   (assoc cofx :app-version
+          (some-> (.querySelector js/document "meta[name=\"app-version\"]")
+                  (.getAttribute "content")))))
+
+(re-frame/reg-cofx
  :new-id
  (fn [cofx]
    (assoc cofx :new-id (random-uuid))))
@@ -100,9 +110,48 @@
        (swap! activity assoc :timer (js/setTimeout check timeout-ms))))))
 
 ;; ---------------------------------------------------------------------------
+;; Backup export: the system share sheet where files can be shared (iOS and
+;; macOS Safari, Android Chrome, Chromium on Windows/ChromeOS), a download
+;; otherwise. Must run inside the click (dispatch-sync), because sharing
+;; needs a user gesture.
+
+(defn- download! [text filename]
+  (let [url (js/URL.createObjectURL (js/Blob. #js [text] #js {:type "application/edn"}))
+        a   (.createElement js/document "a")]
+    (set! (.-href a) url)
+    (set! (.-download a) filename)
+    (.appendChild (.-body js/document) a)
+    (.click a)
+    (.remove a)
+    (js/setTimeout #(js/URL.revokeObjectURL url) 10000)))
+
+(re-frame/reg-fx
+ :backup/export
+ ;; Dispatches `on-done` once the file has been shared or downloaded (not
+ ;; if the parent cancels the share sheet).
+ (fn [{:keys [text filename on-done]}]
+   (let [file   (js/File. #js [text] filename #js {:type "text/plain"})
+         files  #js {:files #js [file]}
+         share? (and (.-canShare js/navigator) (.canShare js/navigator files))]
+     (if share?
+       (-> (.share js/navigator #js {:files #js [file] :title "Stepquence backup"})
+           (.then #(re-frame/dispatch on-done))
+           (.catch (fn [e]
+                     ;; AbortError: the parent closed the share sheet.
+                     (when-not (= "AbortError" (.-name e))
+                       (download! text filename)
+                       (re-frame/dispatch on-done)))))
+       (do (download! text filename)
+           (re-frame/dispatch on-done))))))
+
+;; ---------------------------------------------------------------------------
 ;; Theme
 
-(def ^:private theme-storage-key "stepwise.theme")
+(def ^:private theme-storage-key "stepquence.theme")
+
+(def ^:private legacy-theme-storage-key
+  "The earlier working name's key; read only as a fallback."
+  "stepwise.theme")
 
 (defn system-dark-query []
   (js/matchMedia "(prefers-color-scheme: dark)"))
@@ -114,7 +163,9 @@
  :theme/initial
  ;; :saved is the user's choice (nil until they press the toggle).
  (fn [cofx]
-   (let [stored (try (.getItem js/localStorage theme-storage-key) (catch :default _ nil))]
+   (let [stored (try (or (.getItem js/localStorage theme-storage-key)
+                               (.getItem js/localStorage legacy-theme-storage-key))
+                           (catch :default _ nil))]
      (assoc cofx :theme/initial
             {:saved  (case stored "light" :light "dark" :dark nil)
              :system (system-theme)}))))

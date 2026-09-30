@@ -1,4 +1,4 @@
-# Stepwise
+# Stepquence
 
 An offline-capable PWA for walking through step-by-step routines, built with
 ClojureScript, re-frame and shadow-cljs. Everything stays on the device: no backend, no accounts.

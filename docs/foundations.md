@@ -1,4 +1,4 @@
-# Stepwise — Project Foundations
+# Stepquence — Project Foundations
 
 A partially offline-ready PWA built with ClojureScript + re-frame for creating and walking through customizable step-by-step sequences (routines). Built for an autistic child who reads well; designed to teach sequences as coordinated steps and requirements, and to serve as a household/personal routine resource. A parent creates and edits; the child walks through.
 
@@ -24,7 +24,8 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
 - Parent mode auto-locks on inactivity timeout (`:parent-timeout-seconds`, default 120) and on `visibilitychange` (app backgrounded).
   - Idle detection, no polling: capture-phase `pointerdown`/`keydown` listeners stamp the last-input time into a plain atom (not app-db, so input costs no re-render or save). While unlocked, one timer checks the idle time when it fires and either locks or sleeps for the remainder. At most one wake-up per timeout period.
   - Locking during a walkthrough returns to the sequence list, so a preview can never continue as a real run.
-- While unlocked, a banner on every screen ("Parent mode", the theme toggle, Lock) makes the mode unambiguous. The theme toggle lives there, not on the child's screens.
+- While unlocked, a banner on every screen ("Parent mode", a Settings gear, Lock) makes the mode unambiguous.
+- Settings popover (gear): theme, backup (status, Export, Import), and the build's version at the bottom. The version comes from a `<meta name="app-version">` that the publish script stamps into the published HTML; it's absent in development, so nothing is shown there. The popover closes on Escape (focus returns to the gear) or a press outside it. It's the same pattern as brainboard's settings panel (`stepquence.dismiss` is ported from it). Nothing about backup sits on the sequence list itself.
 - Home screen ("Sequences"): compact sequence cards (image-first once images exist) with a mini dot per step, organized into parent-defined groups. Groups are renamed and reordered in place on the home screen in parent mode.
   - Done today: green edge, check, all dots filled. Started but unfinished today: the steps done so far are filled (it will resume there).
   - A group whose sequences are all done today gets a plain checkmark after its name, in the heading's own color and size.
@@ -187,20 +188,25 @@ A partially offline-ready PWA built with ClojureScript + re-frame for creating a
   - `<img>` displays cross-origin fine, but fetching or canvas-drawing requires CORS. Offer "Save a local copy" when the host allows it.
   - Avoid caching opaque responses (Chrome pads their quota cost heavily).
 - Health check (parent mode): test URL images with `new Image()` onload/onerror across the library, badge affected sequences, and record walkthrough-time failures for the parent.
-- app-db persists to IndexedDB as an EDN string (`pr-str` / `cljs.reader/read-string`) via `idb-keyval`, one key (`stepwise.app-db`) holding the persistent and per-day slices (`:content`, `:settings`, `:meta`, `:day`). The per-run and ephemeral slices are never written.
+- app-db persists to IndexedDB as an EDN string (`pr-str` / `cljs.reader/read-string`) via `idb-keyval`, one key (`stepquence.app-db`) holding the persistent and per-day slices (`:content`, `:settings`, `:meta`, `:day`). The per-run and ephemeral slices are never written.
   - A global interceptor schedules a save only when an event changes a persisted slice. Writes are debounced (500ms) and flushed immediately when the app is hidden.
   - Saving is off until storage has loaded, so defaults can never overwrite stored data.
-  - Stored data that is unreadable or fails the schema is copied to a backup key (`stepwise.app-db.unusable-<ms>`) before the app starts fresh. It is never silently discarded.
+  - Stored data that is unreadable or fails the schema is copied to a backup key (`stepquence.app-db.unusable-<ms>`) before the app starts fresh. It is never silently discarded.
   - Loaded data passes through `storage/migrate` (keyed on `:meta :schema-version`) before validation.
   - If IndexedDB is unavailable, the app runs without saving rather than not at all.
 - Boot is asynchronous: loading state (background only, no spinner) → read → `::loaded` → home.
-- Call `navigator.storage.persist()`. Show a gentle "last backed up N days ago" nudge in parent mode.
+- Call `navigator.storage.persist()`. Show a gentle "last backed up N days ago" nudge in parent mode (see Export / import).
 
 ## Export / import / sharing
-- Export: one file (JSON/EDN) with sequences, libraries, and images embedded as base64. Base64 exists ONLY for transfer and backup. (A zip with image files plus a manifest is a possible later optimization.)
-- Import: a file picker in parent mode. Decode base64 → Blob (e.g. `fetch(dataUrl).then(r => r.blob())`) → IndexedDB. Handle ID collisions.
-- Send: Web Share API with files where `navigator.canShare({files})` is true (iOS/macOS Safari, Android Chrome, Chromium on Windows/ChromeOS); a download link otherwise.
-- Later: single-sequence export for sharing with teachers or therapists.
+- Export: one EDN file (`stepquence-backup-YYYY-MM-DD.edn`) with a format marker (`:stepquence/backup 1`; files with the earlier working name's `:stepwise/backup` still import), the schema version, the export time, all content and settings. Images will be embedded as base64 once they exist. Base64 exists ONLY for transfer and backup. (A zip with image files plus a manifest is a possible later optimization.)
+  - Included: the PIN, so a restored device keeps its lock. Excluded: today's progress, and the theme (a device display preference).
+- Send: Web Share API with files where `navigator.canShare({files})` is true (iOS/macOS Safari, Android Chrome, Chromium on Windows/ChromeOS); a download otherwise. Export runs synchronously inside the click (`dispatch-sync`), because sharing requires a user gesture. A cancelled share sheet doesn't count as a backup.
+- Import (parent mode): a file picker. The whole file is validated against the schema before anything changes. Unreadable, foreign, newer-version or damaged files get a plain explanation and change nothing.
+  - A backup import is a full restore, confirmed in a dialog that summarizes it ("4 sequences in 4 groups, from 28 Sep 2026") and says what will be replaced.
+  - Before replacing, the current data is copied to `stepquence.app-db.before-import-<ms>` in IndexedDB, and the restore can be undone from the toast for a few seconds.
+  - Today's progress starts fresh; the backup's export time becomes the "last backed up" time.
+- The Settings popover shows "Last backed up N days ago" (or "Not backed up yet", emphasized from 14 days on) with Export and Import buttons.
+- Later: single-sequence export for sharing with teachers or therapists, imported as a merge. IDs are random UUIDs, so a matching ID means the same sequence (exported from here earlier, or shared back and forth). On a match, offer "Update mine" (replace in place, keeping its group and schedule here; referenced items and images match by ID too) or "Keep both" (import as a copy with fresh IDs). Anything new is simply added.
 
 ## Platform and accessibility
 - Service worker caches the app shell for offline use.

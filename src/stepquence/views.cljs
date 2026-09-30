@@ -16,4 +16,5 @@
       :walkthrough [walkthrough/walkthrough]
       [home/home])]
    [parent/undo-toast]
+   [parent/import-dialog]
    [parent/pin-pad]])

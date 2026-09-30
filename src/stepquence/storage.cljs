@@ -13,7 +13,12 @@
    [re-frame.core :as re-frame]
    [stepquence.schema :as schema]))
 
-(def storage-key "stepwise.app-db")
+(def storage-key "stepquence.app-db")
+
+(def ^:private legacy-storage-key
+  "Where data lived under the project's earlier working name. Read only
+  when the current key is empty; the next save writes the current key."
+  "stepwise.app-db")
 
 (def save-delay-ms
   "Writes are debounced: a burst of events produces one write."
@@ -61,6 +66,7 @@
  ;; can overwrite it.
  (fn [{:keys [on-loaded]}]
    (-> (idb/get storage-key)
+       (.then (fn [s] (if (nil? s) (idb/get legacy-storage-key) s)))
        (.then (fn [s]
                 (if (nil? s)
                   (re-frame/dispatch (conj on-loaded {:empty true}))
@@ -100,6 +106,14 @@
  ;; Write any pending save now (the app is being hidden or closed).
  (fn [_]
    (flush!)))
+
+(re-frame/reg-fx
+ :storage/save-copy
+ ;; Keep a copy of the current persisted data under its own key (e.g. just
+ ;; before an import replaces everything).
+ (fn [{:keys [key db]}]
+   (-> (idb/set key (encode db))
+       (.catch #(js/console.error "Saving a copy failed" %)))))
 
 (re-frame/reg-fx
  :storage/request-persistence

@@ -2,6 +2,7 @@
   (:require
    [re-frame.core :as re-frame]
    [stepquence.config :as config]
+   [stepquence.backup :as backup]
    [stepquence.day :as day]
    [stepquence.db :as db]
    [stepquence.edit :as edit]
@@ -53,12 +54,13 @@
 
 (re-frame/reg-event-fx
  ::initialize-db
- [(re-frame/inject-cofx :theme/initial)]
+ [(re-frame/inject-cofx :theme/initial) (re-frame/inject-cofx :app-version)]
  (fn-traced [cofx _]
    (let [{:keys [saved system]} (:theme/initial cofx)]
      {:db (-> db/default-db
               (assoc-in [:settings :theme] saved)
               (assoc-in [:ui :system-theme] system)
+              (assoc-in [:ui :app-version] (:app-version cofx))
               (assoc-in [:ui :screen] :loading))
       :fx [[:theme/apply {:theme saved}]
            [:storage/load {:on-loaded [::loaded]}]
@@ -636,3 +638,61 @@
  ::restore-group
  (fn-traced [db [_ undo]]
    (edit-content db #(edit/restore-group % undo))))
+
+;; ---------------------------------------------------------------------------
+;; Backup: export, and import as a full restore (parent mode only)
+
+(re-frame/reg-event-fx
+ ::export-backup
+ ;; Dispatched with dispatch-sync from the click, so the share sheet opens
+ ;; within the user gesture.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} _]
+   (when (parent? db)
+     {:fx [[:backup/export {:text     (backup/encode db now)
+                            :filename (backup/filename now)
+                            :on-done  [::backup-exported now]}]]})))
+
+(re-frame/reg-event-db
+ ::backup-exported
+ (fn-traced [db [_ at]]
+   (assoc-in db [:meta :last-backup-at] at)))
+
+(re-frame/reg-event-db
+ ::import-read
+ ;; A chosen file's text: validated before anything changes.
+ (fn-traced [db [_ text]]
+   (let [{:keys [data error]} (backup/decode text)]
+     (cond-> db
+       (parent? db) (assoc-in [:ui :import] (if error
+                                              {:error error}
+                                              {:data data :summary (backup/summary data)}))))))
+
+(re-frame/reg-event-db
+ ::import-cancel
+ (fn-traced [db _]
+   (assoc-in db [:ui :import] nil)))
+
+(re-frame/reg-event-fx
+ ::import-confirm
+ ;; Keeps a copy of the current data first, then replaces everything. Can
+ ;; also be undone for a few seconds.
+ [(re-frame/inject-cofx :now)]
+ (fn-traced [{:keys [db now]} _]
+   (when-let [data (and (parent? db) (get-in db [:ui :import :data]))]
+     (let [before (select-keys db [:content :settings :meta])]
+       (offer-undo {:db (-> (backup/restore db data now)
+                            (assoc-in [:ui :import] nil)
+                            (assoc-in [:ui :screen] :home)
+                            (assoc-in [:ui :overview?] false))
+                    :fx [[:storage/save-copy {:key (str storage/storage-key ".before-import-" now)
+                                              :db  db}]
+                         [:wake-lock/release]]}
+                   now "Backup restored" [::restore-snapshot before])))))
+
+(re-frame/reg-event-db
+ ::restore-snapshot
+ ;; Undo an import: put back the content, settings and meta from before.
+ (fn-traced [db [_ snapshot]]
+   (cond-> db
+     (parent? db) (merge snapshot))))

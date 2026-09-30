@@ -341,6 +341,21 @@
    (edit/can-delete-step? sequence)))
 
 (re-frame/reg-sub
+ ::app-version
+ (fn [db]
+   (get-in db [:ui :app-version])))
+
+(re-frame/reg-sub
+ ::last-backup-at
+ (fn [db]
+   (get-in db [:meta :last-backup-at])))
+
+(re-frame/reg-sub
+ ::import
+ (fn [db]
+   (get-in db [:ui :import])))
+
+(re-frame/reg-sub
  ::undo
  (fn [db]
    (get-in db [:ui :undo])))

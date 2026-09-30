@@ -136,3 +136,16 @@
    [:path {:fill "none" :stroke "currentColor" :stroke-width 2.2
            :stroke-linecap "round" :stroke-linejoin "round"
            :d "M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"}]])
+
+(defn gear
+  "Settings. Teeth touch the ring (no gap), short and thick, so it reads as
+  a gear rather than a sun (the same drawing as brainboard's)."
+  []
+  [:svg.icon {:viewBox "0 0 24 24" :aria-hidden true :fill "none"
+              :stroke "currentColor" :stroke-width 2.2 :stroke-linecap "round"}
+   [:circle {:cx 12 :cy 12 :r 7}]
+   [:circle {:cx 12 :cy 12 :r 2 :fill "currentColor"}]
+   (for [angle (range 0 360 45)]
+     ^{:key angle}
+     [:line {:x1 12 :y1 5 :x2 12 :y2 3 :stroke-width 3
+             :transform (str "rotate(" angle " 12 12)")}])])
